@@ -1,4 +1,4 @@
-![Ringer Logo](https://github.com/Lif-Platforms/Ringer-Server/blob/main/.github/Ringerlogo.png)
+![Ringer Logo](https://github.com/Lif-Platforms/Ringer-Client-Windows/blob/main/.github/Ringerlogo.png)
 # New-Ringer-Server
 Ringer server is the server code for the Ringer messaging app. The code here is snapshot code so it may not work as intended. 
 
