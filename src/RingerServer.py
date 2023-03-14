@@ -2,6 +2,7 @@ import asyncio
 import websockets
 import json
 import sqlite3
+import secrets
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 
@@ -61,6 +62,21 @@ async def handle(websocket, path):
                 if foundAccount == True:
                     # Tells the client that the login was successful 
                     await websocket.send("LOGIN_GOOD")
+
+                    # Waits for the client to request a login token
+                    tokenRequest = await websocket.recv()
+
+                    # Checks if the client requested a login token
+                    if tokenRequest == "TOKEN":
+                        # Generates and sends the token
+                        token = str(secrets.token_hex(16 // 2))
+                        await websocket.send("TOKEN:" + token)
+
+                        # Updates the token in the database
+                        conn.execute(f"""UPDATE accounts SET Token = '{token}'
+                            WHERE Username = '{username}'""")
+                        
+                        conn.commit()
                 else:
                     # Tells the client the login was not successful 
                     await websocket.send("INVALID_CREDENTIALS")
@@ -98,15 +114,15 @@ async def handle(websocket, path):
                 for item in items:
                     findUser = item[0]
                     if findUser == username:
-                        websocket.send('ERROR_ACCOUNT_EXISTING')
+                        await websocket.send('ERROR_ACCOUNT_EXISTING')
                         continueCreation = False  
                         break
                 
                 # If the account does not already exist then it will continue the creation
                 if continueCreation == True:
                     # Inserts credentials into the database
-                    data = (username, password, email, '{"contacts":[]}')
-                    c.execute(f"INSERT INTO accounts VALUES (?,?,?,?)", data)
+                    data = (username, password, email, "{}", "")
+                    c.execute(f"INSERT INTO accounts VALUES (?,?,?,?,?)", data)
                     conn.commit()
 
                     # Tells the client the account has been created
