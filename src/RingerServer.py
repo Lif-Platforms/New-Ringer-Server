@@ -121,7 +121,7 @@ async def handle(websocket, path):
                 # If the account does not already exist then it will continue the creation
                 if continueCreation == True:
                     # Inserts credentials into the database
-                    data = (username, password, email, "{}", "")
+                    data = (username, password, email, '{"Requests":[]}', "")
                     c.execute(f"INSERT INTO accounts VALUES (?,?,?,?,?)", data)
                     conn.commit()
 
@@ -130,6 +130,80 @@ async def handle(websocket, path):
 
                     # Closes the connection
                     await websocket.close()
+
+            # Checks if the client has requested to add a friend
+            if message == "ADD_FRIEND": 
+                # Requests the user from the client
+                await websocket.send("USER?")
+
+                # Waits for the client to send the user
+                user = await websocket.recv()
+
+                # Loads the data sent from the client
+                loadUser = json.loads(user)
+
+                # Defines who the request is to and from
+                fromUser = loadUser['From']
+                toUser = loadUser['To']
+
+                # Defines the token from the user
+                userToken = loadUser['Token']
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                # Tells the server wether or not the user exists
+                foundUser = False
+
+                # Checks if the user the request is to exists
+                for user in items:
+                    findUser = user[0]
+                    if findUser == fromUser:
+                        foundUser = True
+                        break
+                
+                # Checks if the user was found
+                if foundUser:
+                    # Tells the server wether or not the token was correct
+                    foundToken = False
+
+                    # Checks the senders token
+                    for token in items:
+                        findToken = token[4]
+                        if findToken == userToken:
+                            foundToken = True
+                            break
+
+                        # Checks if the token was correct
+                        if foundToken:
+                            # Gets the recipients friend request inbox
+                            for inbox in items:
+                                findUser = inbox[1]
+                                if findUser == toUser:
+                                    # Loads the friend request inbox 
+                                    friendRequestInbox = json.loads(inbox[3])
+
+                                # Gets the list of friend requests
+                                requestsList = friendRequestInbox["Requests"]
+
+                                # Adds the friend request to the list
+                                requestsList.append(fromUser)
+
+                                # Defines new requests list
+                                newRequestsList = {"Requests":requestsList}
+
+                                # Updates the database
+                                conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(newRequestsList)}'
+                                    WHERE Username = '{toUser}'""")
+                                
+                                conn.commit()
+                        else:
+                            await websocket.send("INVALID_TOKEN")
+
+                else:
+                    # Tells the client the user does not exist
+                    await websocket.send("USER_NO_EXIST")
 
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
