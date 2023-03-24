@@ -5,6 +5,10 @@ import sqlite3
 import secrets
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
+import Packages.logger as logger
+
+# Shows that the server is starting
+logger.showInfo("Server Starting...")
 
 # Global Variables 
 
@@ -211,7 +215,7 @@ async def handle(websocket, path):
 
 async def start_server():
     async with websockets.serve(handle, "localhost", 8000):
-        print("WebSocket server started")
+        logger.showInfo("Server Running!")
         await asyncio.Future()  # Keep the server running indefinitely
 
 asyncio.run(start_server())
