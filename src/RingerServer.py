@@ -6,13 +6,6 @@ import secrets
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 
-# Global Variables 
-
-global conn
-global c
-conn = sqlite3.connect('account.db')
-c = conn.cursor()
-
 async def handle(websocket, path):
     global requestedCredentials
     try:
@@ -22,6 +15,10 @@ async def handle(websocket, path):
             
             # Checks if the user has requested a login
             if message == "USER_LOGIN":
+                # Connects to the database
+                conn = sqlite3.connect('account.db')
+                c = conn.cursor()
+
                 # Requests login credentials from the client
                 await websocket.send("SEND_CREDENTIALS")
                 
@@ -76,12 +73,103 @@ async def handle(websocket, path):
                         conn.execute(f"""UPDATE accounts SET Token = '{token}'
                             WHERE Username = '{username}'""")
                         
+                        print("Executing query")
+
                         conn.commit()
+                        conn.close()
                 else:
                     # Tells the client the login was not successful 
                     await websocket.send("INVALID_CREDENTIALS")
                     # Closes the connection with the client
                     await websocket.close()
+
+            # Checks if the client has requested to add a friend
+            if message == "SEND_FRIEND_REQUEST":
+                # Connects to the database
+                conn = sqlite3.connect('account.db')
+                c = conn.cursor()
+
+                # Requests the user from the client
+                await websocket.send("USER?")
+
+                # Waits for the client to send the user
+                user = await websocket.recv()
+
+                # Loads the data sent from the client
+                loadUser = json.loads(user)
+
+                # Defines who the request is to and from
+                fromUser = loadUser['From']
+                toUser = loadUser['To']
+
+                # Defines the token from the user
+                userToken = loadUser['Token']
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+                print("item")
+
+                # Tells the server whether or not the user exists
+                foundUser = False
+
+                # Checks if the user the request is to exists
+                for user in items:
+                    findUser = user[0]
+                    if findUser == toUser:
+                        foundUser = True
+                        recipient_data = user  # store the recipient's data
+                        break
+
+                # Checks if the user was found
+                if foundUser:
+                    # Tells the server whether or not the token was correct
+                    foundToken = False
+
+                    # Checks the sender's token
+                    for token in items:
+                        findToken = token[4]
+                        checkUser = token[0]
+                        if findToken == userToken and checkUser == fromUser:
+                            print("found token")
+                            foundToken = True
+                            break
+
+                    # Checks if the token was correct
+                    if foundToken:
+                        # Defines the request inbox
+                        # Will be reassigned once it is found
+                        friendRequestInbox = False
+
+                        # Get the recipient's friend request inbox
+                        findUser = recipient_data[0]
+                        friendRequestInbox = json.loads(recipient_data[3])
+
+                        # Gets the list of friend requests
+                        requestsList = friendRequestInbox["Requests"]
+
+                        # Adds the friend request to the list
+                        requestsList.append(fromUser)
+
+                        # Defines new requests list
+                        newRequestsList = {"Requests": requestsList}
+
+                        # Updates the database
+                        conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(newRequestsList)}'
+                                        WHERE Username = '{toUser}'""")
+                        conn.commit()
+
+                        # Tells the client the request was sent
+                        await websocket.send("REQUEST_SENT!")
+
+                        conn.close()
+                    else:
+                        await websocket.send("INVALID_TOKEN")
+                        conn.close()
+                else:
+                    # Tells the client the user does not exist
+                    await websocket.send("USER_NO_EXIST")
+                    conn.close()
 
             # Checks if the user has requested to create an account
             if message == "CREATE_ACCOUNT":
@@ -131,79 +219,55 @@ async def handle(websocket, path):
                     # Closes the connection
                     await websocket.close()
 
-            # Checks if the client has requested to add a friend
-            if message == "ADD_FRIEND": 
-                # Requests the user from the client
-                await websocket.send("USER?")
+            # Checks if the client has requested a list of incoming friend requests
+            if message == "LIST_FRIEND_REQUESTS":
+                # Asks the client for their username and token
+                await websocket.send("VERIFY?")
 
-                # Waits for the client to send the user
-                user = await websocket.recv()
+                # Waits for clients response
+                request = await websocket.recv()
 
-                # Loads the data sent from the client
-                loadUser = json.loads(user)
+                # Loads the request
+                loadRequest = json.loads(request)
 
-                # Defines who the request is to and from
-                fromUser = loadUser['From']
-                toUser = loadUser['To']
+                # Extracts information from loaded request
+                username = loadRequest['Username']
+                token = loadRequest['Token']
 
-                # Defines the token from the user
-                userToken = loadUser['Token']
+                # Connects to the database
+                conn = sqlite3.connect('account.db')
+                c = conn.cursor()
 
                 # Gets all data from the database
                 c.execute("SELECT * FROM accounts")
                 items = c.fetchall()
 
-                # Tells the server wether or not the user exists
-                foundUser = False
+                foundToken = False
 
-                # Checks if the user the request is to exists
-                for user in items:
-                    findUser = user[0]
-                    if findUser == fromUser:
-                        foundUser = True
+                 # Checks the sender's token
+                for token in items:
+                    findToken = token[4]
+                    checkUser = token[0]
+                    if findToken == token and checkUser == username:
+                        print("found token")
+                        foundToken = True
                         break
-                
-                # Checks if the user was found
-                if foundUser:
-                    # Tells the server wether or not the token was correct
-                    foundToken = False
 
-                    # Checks the senders token
-                    for token in items:
-                        findToken = token[4]
-                        if findToken == userToken:
-                            foundToken = True
+                # Checks if the token was found
+                if findToken: 
+                    # Grabs the incoming friend requests from the database
+                    for user in items:
+                        databaseUser = user[0]
+                        if databaseUser == username:
+                            friendRequestsList = user[3]
                             break
 
-                        # Checks if the token was correct
-                        if foundToken:
-                            # Gets the recipients friend request inbox
-                            for inbox in items:
-                                findUser = inbox[1]
-                                if findUser == toUser:
-                                    # Loads the friend request inbox 
-                                    friendRequestInbox = json.loads(inbox[3])
-
-                                # Gets the list of friend requests
-                                requestsList = friendRequestInbox["Requests"]
-
-                                # Adds the friend request to the list
-                                requestsList.append(fromUser)
-
-                                # Defines new requests list
-                                newRequestsList = {"Requests":requestsList}
-
-                                # Updates the database
-                                conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(newRequestsList)}'
-                                    WHERE Username = '{toUser}'""")
-                                
-                                conn.commit()
-                        else:
-                            await websocket.send("INVALID_TOKEN")
+                    # Sends the data to the client
+                    await websocket.send(friendRequestsList)
 
                 else:
-                    # Tells the client the user does not exist
-                    await websocket.send("USER_NO_EXIST")
+                    # Tells the client that their token is invalid
+                    await websocket.send("INVALID_TOKEN")
 
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
