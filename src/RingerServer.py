@@ -195,6 +195,10 @@ async def handle(websocket, path):
                 # Defines and hashes password given by the client
                 password = PasswordHasher.get_initial_hash(loadCredentials['Password'])
 
+                # Connects to the database
+                conn = sqlite3.connect('account.db')
+                c = conn.cursor()
+
                 # Gets all data from the database
                 c.execute("SELECT * FROM accounts")
                 items = c.fetchall()
@@ -208,14 +212,17 @@ async def handle(websocket, path):
                     if findUser == username:
                         await websocket.send('ERROR_ACCOUNT_EXISTING')
                         continueCreation = False  
+                        conn.close()
                         break
                 
                 # If the account does not already exist then it will continue the creation
                 if continueCreation == True:
                     # Inserts credentials into the database
-                    data = (username, password, email, '{"Requests":[]}', "")
-                    c.execute(f"INSERT INTO accounts VALUES (?,?,?,?,?)", data)
+                    data = (username, password, email, '{"Requests":[]}', "none", "none")
+                    c.execute(f"INSERT INTO accounts VALUES (?,?,?,?,?,?)", data)
                     conn.commit()
+
+                    conn.close()
 
                     # Tells the client the account has been created
                     await websocket.send("ACCOUNT_CREATED")
@@ -272,6 +279,77 @@ async def handle(websocket, path):
                 else:
                     # Tells the client that their token is invalid
                     await websocket.send("INVALID_TOKEN")
+
+            # Checks if the client has requested to accept a friend request
+            if message == "ACCEPT_FREIND_REQUEST":
+                # Requests the user from the client
+                await websocket.send("USER?")
+
+                # Waits for the client to send the user
+                user = await websocket.recv()
+
+                # Loads the data sent from the client
+                loadUser = json.loads(user)
+
+                # Defines the username, request, and token
+                username = loadUser['Username']
+                request = loadUser['Request']
+                token = loadUser['Token']
+
+                # Connects to the database
+                conn = sqlite3.connect('account.db')
+                c = conn.cursor()
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                continueAccept = False
+
+                # Verifies token
+                for item in items:
+                    databaseToken = item[4]
+                    databaseUser = item[0]
+
+                    if username == databaseUser and token == databaseToken:
+                        continueAccept = True
+
+                if continueAccept:
+                    # Loads the requests and friends columns from the database
+                    for item in items:
+                        databaseUser = item[0]
+                        if username == databaseUser:
+                            requests = item[3]
+                            friends = item[5]
+
+                    loadRequests = json.loads(requests)
+                    loadFriends = json.loads(friends)
+
+                    # Gets the lists from both the friends and requests columns
+                    requestsList = loadRequests['Requests']
+                    friendsList = loadFriends['Freinds']
+
+                    # Moves the request to the friends list
+                    requestsList.remove(request)
+                    friendsList.append(request)
+
+                    # Updates json fore database
+                    newRequests = {"Requests": requestsList}
+                    newFriendsList = {"Freinds": friendsList}
+
+                    # Updates the database
+                    conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(newRequests)}'
+                                        WHERE Username = '{username}'""")
+                    
+                    conn.execute(f"""UPDATE accounts SET Friends = '{json.dumps(newFriendsList)}'
+                                        WHERE Username = '{username}'""")
+                    
+                    conn.commit()
+
+                    conn.close()
+
+                    # Tells the client that the action was completed successfully
+                    await websocket.send("REQUEST_ACCEPTED")
 
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
