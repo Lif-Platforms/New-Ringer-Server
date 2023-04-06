@@ -3,12 +3,19 @@ import websockets
 import json
 import sqlite3
 import secrets
+import yaml
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 import Packages.logger as logger
 
 # Shows that the server is starting
 logger.showInfo("Server Starting...")
+
+# Loads Config
+logger.showInfo("Loading Config...")
+with open("example.yaml", "r") as config:
+    configuration = yaml.safe_load(config)
+    logger.showInfo("Config Loaded")
 
 async def handle(websocket, path):
     global requestedCredentials
