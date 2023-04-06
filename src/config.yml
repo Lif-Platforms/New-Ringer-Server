@@ -3,7 +3,7 @@ Host: localhost
 Port: 8000
 
 # Tells the server the path to the logs folder 
-Path-To-Logs: ""
+Path-To-Logs: src/logs
 
 # Tells the server where to look for the database
 Path-To-Database: account.db

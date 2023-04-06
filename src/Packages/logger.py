@@ -8,8 +8,7 @@ import datetime
 import time
 from termcolor import colored
 import uuid 
-import os
-from pathlib import Path
+import yaml
 
 # Generates a session id
 sessionId = uuid.uuid4()
@@ -25,8 +24,12 @@ year = current_time.year
 # Formats the date
 date = f"{month}-{day}-{year}"
 
+# Loads config
+with open("src/config.yml", "r") as config:
+    configuration = yaml.safe_load(config)
+
 # Creates new log file
-logFile = open("C:/Users/bbartlett24/Documents/GitHub/New-Ringer-Server/src/logs/file.txt", "a")
+logFile = open("file.txt", "a")
 
 # Function for getting the prefix for the logs
 def getPrefix(type):
