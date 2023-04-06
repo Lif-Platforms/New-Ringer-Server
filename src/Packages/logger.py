@@ -7,6 +7,26 @@
 import datetime
 import time
 from termcolor import colored
+import uuid 
+import os
+from pathlib import Path
+
+# Generates a session id
+sessionId = uuid.uuid4()
+
+# using now() to get current time
+current_time = datetime.datetime.now()
+
+# Defines date variables
+month = current_time.month
+day = current_time.day
+year = current_time.year
+
+# Formats the date
+date = f"{month}-{day}-{year}"
+
+# Creates new log file
+logFile = open("C:/Users/bbartlett24/Documents/GitHub/New-Ringer-Server/src/logs/file.txt", "a")
 
 # Function for getting the prefix for the logs
 def getPrefix(type):
