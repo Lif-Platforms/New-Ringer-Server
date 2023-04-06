@@ -3,19 +3,12 @@ import websockets
 import json
 import sqlite3
 import secrets
-import yaml
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 import Packages.logger as logger
 
 # Shows that the server is starting
 logger.showInfo("Server Starting...")
-
-# Loads Config
-logger.showInfo("Loading Config...")
-with open("src/config.yml", "r") as config:
-    configuration = yaml.safe_load(config)
-    logger.showInfo("Config Loaded")
 
 async def handle(websocket, path):
     global requestedCredentials
@@ -27,7 +20,7 @@ async def handle(websocket, path):
             # Checks if the user has requested a login
             if message == "USER_LOGIN":
                 # Connects to the database
-                conn = sqlite3.connect(configuration['Path-To-Database'])
+                conn = sqlite3.connect('account.db')
                 c = conn.cursor()
 
                 # Requests login credentials from the client
@@ -97,7 +90,7 @@ async def handle(websocket, path):
             # Checks if the client has requested to add a friend
             if message == "SEND_FRIEND_REQUEST":
                 # Connects to the database
-                conn = sqlite3.connect(configuration['Path-To-Database'])
+                conn = sqlite3.connect('account.db')
                 c = conn.cursor()
 
                 # Requests the user from the client
@@ -203,7 +196,7 @@ async def handle(websocket, path):
                 password = PasswordHasher.get_initial_hash(loadCredentials['Password'])
 
                 # Connects to the database
-                conn = sqlite3.connect(configuration['Path-To-Database'])
+                conn = sqlite3.connect('account.db')
                 c = conn.cursor()
 
                 # Gets all data from the database
@@ -253,7 +246,7 @@ async def handle(websocket, path):
                 token = loadRequest['Token']
 
                 # Connects to the database
-                conn = sqlite3.connect(configuration['Path-To-Database'])
+                conn = sqlite3.connect('account.db')
                 c = conn.cursor()
 
                 # Gets all data from the database
@@ -304,7 +297,7 @@ async def handle(websocket, path):
                 token = loadUser['Token']
 
                 # Connects to the database
-                conn = sqlite3.connect(configuration['Path-To-Database'])
+                conn = sqlite3.connect('account.db')
                 c = conn.cursor()
 
                 # Gets all data from the database
