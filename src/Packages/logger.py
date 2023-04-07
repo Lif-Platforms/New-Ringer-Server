@@ -7,6 +7,30 @@
 import datetime
 import time
 from termcolor import colored
+import uuid 
+import yaml
+
+# Generates a session id
+sessionId = uuid.uuid4()
+
+# using now() to get current time
+current_time = datetime.datetime.now()
+
+# Defines date variables
+month = current_time.month
+day = current_time.day
+year = current_time.year
+
+# Formats the date
+date = f"{month}-{day}-{year}"
+
+# Loads config
+with open("src/config.yml", "r") as config:
+    configuration = yaml.safe_load(config)
+
+# Creates new log file
+logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+logFile.close()
 
 # Function for getting the prefix for the logs
 def getPrefix(type):
@@ -41,6 +65,11 @@ def showInfo(message):
     # Displays the prefix 
     print(colored(log, "white"))
 
+    # Saves the log
+    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+    logFile.write(log + "\n")
+    logFile.close()
+
 # Function for showing a warning
 def showWarning(message):
     # Gets the prefix for logging messages 
@@ -52,6 +81,11 @@ def showWarning(message):
     # Displays the prefix 
     print(colored(log, "yellow"))
 
+    # Saves the log
+    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+    logFile.write(log + "\n")
+    logFile.close()
+
 # Function for showing a warning
 def showError(message):
     # Gets the prefix for logging messages 
@@ -62,3 +96,8 @@ def showError(message):
 
     # Displays the prefix 
     print(colored(log, "red"))
+
+    # Saves the log
+    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+    logFile.write(log + "\n")
+    logFile.close()
