@@ -1,7 +1,7 @@
 ---
 name: Setup Help
 about: Get help with Ringer Server Setup
-title: ''
+title: Setup Help
 labels: help wanted
 assignees: ''
 
