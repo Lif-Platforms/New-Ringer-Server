@@ -296,12 +296,12 @@ async def handle(websocket, path):
                 user = await websocket.recv()
 
                 # Loads the data sent from the client
-                loadUser = json.loads(user)
+                loadUserRequests = json.loads(user)
 
                 # Defines the username, request, and token
-                username = loadUser['Username']
-                request = loadUser['Request']
-                token = loadUser['Token']
+                username = loadUserRequests['Username']
+                request = loadUserRequests['Request']
+                token = loadUserRequests['Token']
 
                 # Connects to the database
                 conn = sqlite3.connect(configuration['Path-To-Database'])
