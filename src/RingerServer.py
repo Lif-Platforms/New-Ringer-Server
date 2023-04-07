@@ -360,7 +360,7 @@ async def handle(websocket, path):
 
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
-        print("Connection closed unexpectedly")
+        logger.showInfo("Connection was closed unexpectedly")
 
 async def start_server():
     async with websockets.serve(handle, "localhost", 8000):
