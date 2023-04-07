@@ -9,4 +9,5 @@ Lif Platforms is looking for contributers for Ringer and other services from Lif
 Ringers client code is located in another repository: https://github.com/Lif-Platforms/Ringer-Client-Desktop
 
 # Instalation and Use
-Ringer server requires little setup. all you need is to clone the repository and install all of the required libraries. Also make sure you have the configuration correct. 
+To learn about how to setup an use Ringer Server, check out our wiki page.
+https://github.com/Lif-Platforms/New-Ringer-Server/wiki 
