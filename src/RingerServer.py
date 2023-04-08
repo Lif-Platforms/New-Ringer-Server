@@ -4,6 +4,7 @@ import json
 import sqlite3
 import secrets
 import yaml
+import uuid
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 import Packages.logger as logger
@@ -336,9 +337,12 @@ async def handle(websocket, path):
                     requestsList = loadRequests['Requests']
                     friendsList = loadFriends['Freinds']
 
+                    # Generates a unique conversation id 
+                    conversationId = str(uuid.uuid4())
+
                     # Moves the request to the friends list
                     requestsList.remove(request)
-                    friendsList.append(request)
+                    friendsList[request] = conversationId
 
                     # Updates json fore database
                     newRequests = {"Requests": requestsList}
@@ -360,7 +364,7 @@ async def handle(websocket, path):
 
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
-        logger.showInfo("Connection was closed unexpectedly")
+        print("Connection closed unexpectedly")
 
 async def start_server():
     async with websockets.serve(handle, "localhost", 8000):
