@@ -296,6 +296,8 @@ async def handle(websocket, path):
                 # Waits for the client to send the user
                 user = await websocket.recv()
 
+                print(user)
+
                 # Loads the data sent from the client
                 loadUserRequests = json.loads(user)
 
@@ -354,6 +356,12 @@ async def handle(websocket, path):
                     
                     conn.execute(f"""UPDATE accounts SET Friends = '{json.dumps(newFriendsList)}'
                                         WHERE Username = '{username}'""")
+                    
+                    # Prepares json data to go into the conversations table
+                    conversationData = (conversationId, f'{{"Members": [{username}, {request}]}}', '{"Messages": {}}')
+
+                    # Add conversation to conversations table
+                    c.execute("INSERT INTO conversations VALUES (?,?,?)", conversationData)
                     
                     conn.commit()
 
