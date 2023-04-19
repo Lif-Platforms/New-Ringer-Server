@@ -370,6 +370,66 @@ async def handle(websocket, path):
                     # Tells the client that the action was completed successfully
                     await websocket.send("REQUEST_ACCEPTED")
 
+            if message == "LIST_FRIENDS":
+                # Asks the client to verify the request
+                await websocket.send("VERIFY?")
+
+                # Waits for the client to send a reply
+                response = await websocket.recv()
+
+                print("response: " + response)
+
+                # Loads response from client
+                loadResponse = json.loads(response)
+
+                # Defines username and token sent by client
+                username = loadResponse['Username']
+                token = loadResponse['Token']
+
+                print(username)
+                print(token)
+
+                # Connects to the database
+                conn = sqlite3.connect(configuration['Path-To-Database'])
+                c = conn.cursor()
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                continueRequest = False
+
+                 # Verifies token
+                for item in items:
+                    databaseToken = item[4]
+                    databaseUser = item[0]
+                    if username == databaseUser and token == databaseToken:
+                        print("found token")
+                        continueRequest = True
+
+                # Checks if the token has been verified
+                if continueRequest: 
+                    # Finds the list for friends 
+                    for item in items:
+                        databaseUser = item[0]
+                        if databaseUser == username:
+                            friendsList = item[5]
+
+                    # Loads list from database
+                    list = json.loads(friendsList)
+                    list2 = list['Freinds']
+
+                    # Prepares data for sending
+                    data = json.dumps(list2)
+
+                    # Sends list to client
+                    await websocket.send(data)
+
+                    print("sent data")
+
+                else: 
+                    await websocket.send("INVALID_TOKEN")
+
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
         print("Connection closed unexpectedly")
