@@ -28,9 +28,11 @@ date = f"{month}-{day}-{year}"
 with open("src/config.yml", "r") as config:
     configuration = yaml.safe_load(config)
 
-# Creates new log file
-logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
-logFile.close()
+# Checks if save logs is enabled
+if configuration['Save-Logs']:
+    # Creates new log file 
+    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+    logFile.close()
 
 # Function for getting the prefix for the logs
 def getPrefix(type):
@@ -65,10 +67,12 @@ def showInfo(message):
     # Displays the prefix 
     print(colored(log, "white"))
 
-    # Saves the log
-    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
-    logFile.write(log + "\n")
-    logFile.close()
+    # Checks if saved logs is enabled in the config
+    if configuration['Save-Logs'] == True: 
+        # Saves the log
+        logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+        logFile.write(log + "\n")
+        logFile.close()
 
 # Function for showing a warning
 def showWarning(message):
@@ -81,10 +85,12 @@ def showWarning(message):
     # Displays the prefix 
     print(colored(log, "yellow"))
 
-    # Saves the log
-    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
-    logFile.write(log + "\n")
-    logFile.close()
+    # Checks if saved logs is enabled in the config
+    if configuration['Save-Logs'] == True: 
+        # Saves the log
+        logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+        logFile.write(log + "\n")
+        logFile.close()
 
 # Function for showing a warning
 def showError(message):
@@ -97,7 +103,9 @@ def showError(message):
     # Displays the prefix 
     print(colored(log, "red"))
 
-    # Saves the log
-    logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
-    logFile.write(log + "\n")
-    logFile.close()
+    # Checks if saved logs is enabled in the config
+    if configuration['Save-Logs'] == True: 
+        # Saves the log
+        logFile = open(f"{configuration['Path-To-Logs']}/{date}={sessionId}", "a")
+        logFile.write(log + "\n")
+        logFile.close()
