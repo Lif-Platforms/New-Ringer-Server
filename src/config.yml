@@ -5,5 +5,8 @@ Port: 8000
 # Tells the server the path to the logs folder 
 Path-To-Logs: src/logs
 
+# Tells the server weather or not to save the logs to the logs folder
+Save-Logs: false
+
 # Tells the server where to look for the database
 Path-To-Database: src/account.db
