@@ -1,4 +1,10 @@
 ![Ringer Logo](https://github.com/Lif-Platforms/Ringer-Client-Windows/blob/main/.github/Ringerlogo.png)
+![GitHub](https://img.shields.io/github/license/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
+![GitHub all releases](https://img.shields.io/github/downloads/Lif-Platforms/New-Ringer-Server/total?style=for-the-badge)
+![GitHub contributors](https://img.shields.io/github/contributors/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
+![GitHub issues](https://img.shields.io/github/issues/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
+
+
 # New-Ringer-Server
 Ringer server is the server code for the Ringer messaging app. The code here is snapshot code so it may not work as intended. 
 
