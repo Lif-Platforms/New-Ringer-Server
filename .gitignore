@@ -1,2 +1,5 @@
 # ignore all logs
-*.src/logs
+.src/logs
+
+# ignore all enviroment variables
+.env
