@@ -346,7 +346,7 @@ async def handle(websocket, path):
                     requestsList.remove(request)
                     friendsList[request] = conversationId
 
-                    # Updates json fore database
+                    # Updates json for database
                     newRequests = {"Requests": requestsList}
                     newFriendsList = {"Freinds": friendsList}
 
@@ -357,8 +357,30 @@ async def handle(websocket, path):
                     conn.execute(f"""UPDATE accounts SET Friends = '{json.dumps(newFriendsList)}'
                                         WHERE Username = '{username}'""")
                     
+                    # Finds the requestors friends list
+                    for item in items:
+                        databaseUser = item[0]
+
+                        if request == databaseUser:
+                            print("found requestor list")
+                            # Loads the friends list from the database
+                            requestorFriends = item[5]
+                            loadRequestorFriends = json.loads(requestorFriends)
+                            requestorFriendsList = loadRequestorFriends['Freinds']
+                            
+                            # Adds acceptor to requestor friends list
+                            requestorFriendsList[username] = conversationId
+
+                            # Prepares new requestor friends list 
+                            newRequestorFriends = {"Freinds" : requestorFriendsList}
+                            dumpNewRequestorFriends = json.dumps(newRequestorFriends)
+
+                            # Updates list in database
+                            conn.execute(f"""UPDATE accounts SET Friends = ? WHERE Username = ?""", 
+                                         (dumpNewRequestorFriends, request))
+                    
                     # Prepares json data to go into the conversations table
-                    conversationData = (conversationId, f'{{"Members": [{username}, {request}]}}', '{"Messages": {}}')
+                    conversationData = (conversationId, f'{{"Members": ["{username}", "{request}"]}}', '{"Messages": []}')
 
                     # Add conversation to conversations table
                     c.execute("INSERT INTO conversations VALUES (?,?,?)", conversationData)
@@ -428,6 +450,104 @@ async def handle(websocket, path):
                     print("sent data")
 
                 else: 
+                    await websocket.send("INVALID_TOKEN")
+
+            if message == "SEND_MESSAGE":
+                # Asks the client for the message being sent
+                await websocket.send("MESSAGE?")
+
+                # Gets message from client
+                recvMessage = await websocket.recv()
+
+                # Loads data from client
+                loadData = json.loads(recvMessage)
+
+                # Separates client data into different variables
+                userMessage = loadData['Message']
+                conversationId = loadData['Id']
+                sender = loadData['Sender']
+                token = loadData['Token']
+
+                print(token)
+
+                # Connects to the database
+                conn = sqlite3.connect(configuration['Path-To-Database'])
+                c = conn.cursor()
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                verifyToken = False
+                
+                # Verifies token
+                for item in items:
+                    databaseUser = item[0]
+                    databaseToken = item[4]
+
+                    if sender == databaseUser and token == databaseToken:
+                        print("found token")
+                        verifyToken = True
+
+                # Tells the server wether or not the conversation has been verified
+                verifyConversation = False
+
+                # Continues message send if token is good
+                if verifyToken == True:
+                    # Gets all data from the database
+                    c.execute("SELECT * FROM conversations")
+                    items = c.fetchall()
+
+                    # Verifies that the user is a member of the conversation
+                    for item in items:
+                        id = item[0]
+                        members = item[1]
+
+                        if conversationId == id:
+                            loadMembers = json.loads(members)
+                            checkMembers = loadMembers['Members']
+                            
+                            if sender in checkMembers:
+                                verifyConversation = True
+
+                    # Continues if the conversation has been verified 
+                    if verifyConversation == True:
+                        print("conversation varified")
+                        c.execute("SELECT * FROM conversations WHERE id=?", (conversationId,))
+                        rows = c.fetchall()
+
+                        # Extracts the tuple from the list so it can be worked with
+                        loadRow = rows[0]
+                        
+                        # Loads conversation from row
+                        conversation = loadRow[2]
+                        loadConversation = json.loads(conversation)
+
+                        # Grabs the list of messages from the dict
+                        messages = loadConversation['Messages']
+
+                        # Prepares data to be added to conversation
+                        data = {sender : userMessage}
+
+                        # Adds message to conversation
+                        messages.append(data)
+
+                        # Prepares new conversation
+                        newConversation = {"Messages": messages}
+                        dumpNewConversation = json.dumps(newConversation)
+
+                        # Updates conversation in database 
+                        conn.execute("""UPDATE conversations SET Messages = ? WHERE Id = ?""",
+                                    (dumpNewConversation, conversationId))
+                        
+                        # Commits can closes the database
+                        conn.commit()
+                        conn.close()
+
+                        # Tells the client the message has been sent
+                        await websocket.send("MESSAGE_SENT!")
+
+                else:
                     await websocket.send("INVALID_TOKEN")
 
     except websockets.exceptions.ConnectionClosedError:
