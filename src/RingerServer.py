@@ -5,9 +5,11 @@ import sqlite3
 import secrets
 import yaml
 import uuid
+import random
 # Import Packages
 import Packages.passwordHasher as PasswordHasher
 import Packages.logger as logger
+import Packages.emailSender as email
 
 # Shows that the server is starting
 logger.showInfo("Server Starting...")
@@ -550,6 +552,132 @@ async def handle(websocket, path):
                 else:
                     await websocket.send("INVALID_TOKEN")
 
+            if message == "LOAD_MESSAGES":
+                # Asks the client to verify 
+                await websocket.send("VERIFY?")
+
+                # Waits for the clients response
+                response = await websocket.recv()
+
+                print(response)
+
+                # Loads the response from client into useable format
+                loadResponse = json.loads(response)
+
+                # Extracts data from loaded response
+                token = loadResponse['Token']
+                conversationId = loadResponse['Conversation_Id']
+                username = loadResponse['Username']
+
+                # Connects to the database
+                conn = sqlite3.connect(configuration['Path-To-Database'])
+                c = conn.cursor()
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                tokenVerified = False
+
+                # Verifies token
+                for item in items:
+                    databaseToken = item[4]
+                    databaseUser = item[0]
+
+                    if username == databaseUser and token == databaseToken:
+                        tokenVerified = True
+
+                if tokenVerified == True:
+                    # Gets all data from the database
+                    c.execute("SELECT * FROM conversations")
+                    items = c.fetchall()
+
+                    foundConversation = False
+
+                    # Finds conversation 
+                    for item in items:
+                        databaseConversationId = item[0]
+
+                        if str(conversationId) == databaseConversationId:
+                            foundConversation = item[2]
+
+                    # Sends conversation to client
+                    if foundConversation != False:
+                        await websocket.send(foundConversation)
+                    
+            if message == "PASSWORD_RESET":
+                # Asks the client for the username of the account
+                await websocket.send("USERNAME?")
+
+                # Waits for the client to send the username
+                username = await websocket.recv()
+
+                # Asks the client for the email of the account
+                await websocket.send("EMAIL?")
+
+                # Waits for the client to send the email
+                email = await websocket.recv()
+
+                # Connects to the database
+                conn = sqlite3.connect(configuration['Path-To-Database'])
+                c = conn.cursor()
+
+                # Gets all data from the database
+                c.execute("SELECT * FROM accounts")
+                items = c.fetchall()
+
+                verifyEmail = False
+
+                # Verifies the username and email
+                for item in items:
+                    databaseUser = item[0]
+                    databaseEmail = item[2]
+
+                    if username == databaseUser and email == databaseEmail:
+                        verifyEmail = True
+
+                # Checks if the email has been verified 
+                if verifyEmail == True:
+                    # Generates a random code to send to the client
+                    code = random.randint(100000, 999999)
+
+                    email.ResetCodeEmail(code=code, username=username, userEmail=email)
+
+                    verifyCode = False
+
+                    while True:
+                        # Asks client for reset code
+                        await websocket.send("CODE?")
+
+                        # Waits for the client to send the code
+                        clientCode = await websocket.recv()
+
+                        # Checks if the code from client is correct 
+                        if clientCode == str(code):
+                            verifyCode = True
+                            break
+
+                        else:
+                            await websocket.send("INVALID_CODE")
+
+                    if verifyCode == True:
+                        # Asks the client for the new password
+                        await websocket.send("PASSWORD?")
+
+                        # Waits for the client to send the password
+                        newPassword = await websocket.recv()
+
+                        # Updates password in database
+                        conn.execute("""UPDATE accounts SET Password = ? WHERE Username = ?""",
+                                    (newPassword, username))
+                        
+                        # Commits can closes the database
+                        conn.commit()
+                        conn.close()
+                        
+                        # Tells the client the password was reset
+                        await websocket.send("PASSWORD_RESET_DONE!")
+
     except websockets.exceptions.ConnectionClosedError:
         # Handle the case where the connection is closed unexpectedly
         logger.showError("Connection Closed Unexpectedly!")
@@ -557,6 +685,7 @@ async def handle(websocket, path):
 async def start_server():
     async with websockets.serve(handle, "localhost", 8000):
         logger.showInfo("Server Running!")
-        await asyncio.Future()  # Keep the server running indefinitely
+        # Keep the server running indefinitely
+        await asyncio.Future()  
 
 asyncio.run(start_server())
