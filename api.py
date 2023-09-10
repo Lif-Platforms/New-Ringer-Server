@@ -125,6 +125,10 @@ def load_messages(username, token, conversation):
     if status == 'GOOD!':
         messages = database.get_messages(conversation)
 
+        # Remove all but the last 20 messages
+        if len(messages) > 20:
+            messages = messages[-20:]
+
         return messages
     
     else:
