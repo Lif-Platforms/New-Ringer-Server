@@ -189,3 +189,72 @@ def get_members(conversation_id: str):
             members = json.loads(item[1])
 
     return members
+
+def remove_conversation(conversation_id: str, username: str):
+    try:
+        # Connects to the database
+        conn = sqlite3.connect(configuration['Path-To-Database'])
+        c = conn.cursor()
+
+        # Get all entries from the conversations table
+        c.execute("SELECT * FROM conversations")
+        conversation_items = c.fetchall()
+
+        found_conversation = False
+
+        # Used to remove the conversation id from the members of this conversation
+        conversation_members = []
+
+        for conversation in conversation_items:
+            database_conversation = conversation[0]
+
+            if database_conversation == conversation_id:
+                members = json.loads(conversation[1])
+
+                # Check if user is a member of the conversation
+                # If not, return a NO_PERMISSION error
+                if username in members:
+                    conversation_members = members
+
+                    # Remove database entry
+                    c.execute("DELETE FROM conversations WHERE Id = ?", (conversation_id,))
+                    conn.commit()
+
+                    # Get all entries from the accounts table
+                    c.execute("SELECT * FROM accounts")
+                    account_items = c.fetchall()
+
+                    # Find and remove conversation id from conversation members
+                    for member in conversation_members:
+                        for account in account_items:
+                            if account[0] == member:
+                                # Load data from database
+                                friends_data = json.loads(account[2])
+
+                                try:
+                                    # Remove conversation from friends data
+                                    new_friends_data = [item for item in friends_data if item.get('Id') != conversation_id]
+
+                                    # Update database
+                                    conn.execute("UPDATE accounts SET Friends = ? WHERE Account = ?",
+                                                 (json.dumps(new_friends_data), member))
+                                except KeyError:
+                                    pass
+
+                    conn.commit()
+                    conn.close()
+
+                    return "OK"
+                else:
+                    conn.close()
+                    return "NO_PERMISSION"
+        
+        # If conversation_id is not found
+        conn.close()
+        return "CONVERSATION_NOT_FOUND"
+
+    except Exception as e:
+        # Handle exceptions and log errors
+        print(f"Error: {e}")
+        return "ERROR"
+    
