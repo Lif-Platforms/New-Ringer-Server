@@ -4,6 +4,7 @@ import utils.auth_server_interface as auth_server
 import utils.db_interface as database
 import json
 import uvicorn
+from fastapi import Request
 
 app = FastAPI()
 
@@ -82,8 +83,14 @@ def add_friend(username, token, accept_user):
     else:
         return {"Status": "Unsuccessful"}
     
-@app.get('/send_message/{username}/{token}/{message}/{conversation_id}')
-async def send_message(username, token, message, conversation_id):
+@app.post('/send_message')
+async def send_message(request: Request):
+    data = await request.json()  # Parse JSON data from the request body
+    username = data.get('username')
+    token = data.get('token')
+    message = data.get('message')
+    conversation_id = data.get('conversation_id')
+
     # Verifies token
     status = auth_server.verify_token(username, token)
 
