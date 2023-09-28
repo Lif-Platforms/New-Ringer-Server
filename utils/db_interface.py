@@ -125,6 +125,33 @@ def accept_friend(account, friend):
     conn.commit()
     conn.close()
 
+def deny_friend(username, deny_user): 
+    # Connects to database
+    conn = sqlite3.connect(configuration['Path-To-Database'])
+    c = conn.cursor()
+
+    # Gets all data from the database
+    c.execute("SELECT * FROM accounts")
+    items = c.fetchall()
+
+    # Find user in database
+    for user in items:
+        database_user = user[0]
+        if username == database_user:
+            # Get current pending friend requests
+            requests = json.loads(user[1])
+
+            new_requests = [item for item in requests if item.get("name") != deny_user]
+
+            # Update requests in database
+            conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(new_requests)}'
+                                        WHERE Account = '{username}'""")
+
+            break
+    
+    conn.commit()
+    conn.close()
+
 def send_message(author, conversation_id, message):
     # Connects to database
     conn = sqlite3.connect(configuration['Path-To-Database'])

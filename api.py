@@ -83,6 +83,18 @@ def add_friend(username, token, accept_user):
     else:
         return {"Status": "Unsuccessful"}
     
+@app.get('/deny_friend_request/{username}/{token}/{deny_user}')
+def deny_friend(username, token, deny_user):
+    # Verifies token with auth server
+    status = auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        database.deny_friend(username, deny_user)
+
+        return {"Status": "Ok"}
+    else:
+        return HTTPException(status_code=401, detail="Invalid Token!")
+    
 @app.post('/send_message')
 async def send_message(request: Request):
     data = await request.json()  # Parse JSON data from the request body
