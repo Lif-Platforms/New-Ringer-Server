@@ -4,7 +4,7 @@ import json
 import uuid
 
 # Loads Config
-with open("src/config.yml", "r") as config:
+with open("config.yml", "r") as config:
     configuration = yaml.safe_load(config)
 
 def get_friends_list(account):
