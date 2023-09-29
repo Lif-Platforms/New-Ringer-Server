@@ -10,3 +10,6 @@ Save-Logs: false
 
 # Tells the server where to look for the database
 Path-To-Database: database/account.db
+
+# Configuration for the Lif Auth server URL
+Auth-Server-URL: http://localhost:8002
