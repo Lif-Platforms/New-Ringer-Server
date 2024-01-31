@@ -26,13 +26,11 @@ def get_friends(username: str, token: str):
     if status == "GOOD!":
         friends_list = database.get_friends_list(username)
 
-        if friends_list:
-            load_friends_list = json.loads(friends_list)
-            print(type(load_friends_list))
-            return load_friends_list
-        else:
-            raise HTTPException(status_code=404, detail="Friends list not found!")
-
+        load_friends_list = json.loads(friends_list)
+        print(type(load_friends_list))
+        
+        return load_friends_list
+       
     elif status == "INVALID_TOKEN":
         raise HTTPException(status_code=401, detail="Invalid token!")
 

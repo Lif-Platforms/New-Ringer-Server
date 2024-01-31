@@ -12,20 +12,23 @@ def get_friends_list(account):
     conn = sqlite3.connect(configuration['Path-To-Database'])
     c = conn.cursor()
 
+    friends_list = None
+
     # Gets all data from the database
-    c.execute("SELECT * FROM accounts")
-    items = c.fetchall()
+    c.execute("SELECT * FROM accounts WHERE Account = ?", (account,))
+    item = c.fetchone()
+
+    # Check if friends list is present
+    # If not, then it will be created
+    if not item:
+        c.execute("INSERT INTO accounts (Account, FreindRequests, Friends) VALUES (?, ?, ?)", (account, "[]", "[]"))
+        conn.commit()
+
+        friends_list = "[]"
+    else:
+        friends_list = item[2]
 
     conn.close()
-
-    friends_list = False
-
-    # Searches for account
-    for db_account in items: 
-        database_account = db_account[0]
-
-        if account == database_account:
-            friends_list = db_account[2]
 
     return friends_list
 
@@ -35,20 +38,23 @@ def get_friend_requests(account):
     c = conn.cursor()
 
     # Gets all data from the database
-    c.execute("SELECT * FROM accounts")
-    items = c.fetchall()
+    c.execute("SELECT * FROM accounts WHERE Account = ?", (account,))
+    item = c.fetchone()
+
+    requests_list = None
+
+    # Check if friend requests list is present
+    # If not, then it will be created
+    if not item:
+        c.execute("INSERT INTO accounts (Account, FreindRequests, Friends) VALUES (?, ?, ?)", (account, "[]", "[]"))
+        conn.commit()
+
+        requests_list = "[]"
+    else:
+        requests_list = item[1]
 
     conn.close()
-
-    requests_list = False
-
-    # Searches for account
-    for db_account in items: 
-        database_account = db_account[0]
-
-        if account == database_account:
-            requests_list = db_account[1]
-
+    
     return requests_list
 
 def add_new_friend(account, username): 
