@@ -179,6 +179,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     authenticated = False
     user_socket = None
+    username = None
 
     try:
         while True:
@@ -190,13 +191,36 @@ async def websocket_endpoint(websocket: WebSocket):
                     authenticated = True
                     user_socket = {"User": auth_details['Username'], "Socket": websocket}
                     notification_sockets.append(user_socket)
+                    username = auth_details['Username']
                     print(notification_sockets)
                 else:
                     await websocket.send_text(json.dumps({"Status": "Failed", "Reason": "INVALID_TOKEN"}))
                     await websocket.close()
             else:
-                data = await websocket.receive_text()
-                # Process incoming data from the client
+                data = await websocket.receive_json()
+                
+                if data["MessageType"] == "SEND_MESSAGE":
+                    # Get conversation members to ensure authorization
+                    members = database.get_members(data["ConversationId"])
+
+                    # Check if user is a member of the conversation
+                    if username in members:
+                        # Add message to database
+                        database.send_message(username, data["ConversationId"], data["Message"])
+
+                        # Tell client message was sent
+                        await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT"}))
+
+                        # Notify conversation members that the message was sent
+                        for user in notification_sockets:
+                            if user["User"] in members:
+                                await user["Socket"].send_text(json.dumps({"Type": "MESSAGE_UPDATE", "Id": data["ConversationId"], "Message": {"Author": username, "Message": data["Message"]}}))
+                                print("sent notification to: " + user["User"])
+                    else:
+                        await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
+                else:
+                    await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
+
     except WebSocketDisconnect:
         if authenticated:
             notification_sockets.remove(user_socket)
