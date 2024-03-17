@@ -5,6 +5,43 @@ import utils.db_interface as database
 import json
 import uvicorn
 from fastapi import Request
+import os
+import yaml
+
+resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
+
+if not os.path.isfile("config.yml"):
+    with open("config.yml", 'x') as config:
+        config.close()
+
+with open("config.yml", "r") as config:
+    contents = config.read()
+    configurations = yaml.safe_load(contents)
+    config.close()
+
+# Ensure the configurations are not None
+if configurations == None:
+    configurations = {}
+
+# Open reference json file for config
+with open(f"{resources_folder}/json data/default_config.json", "r") as json_file:
+    json_data = json_file.read()
+    default_config = json.loads(json_data)
+    
+# Compare config with json data
+for option in default_config:
+    if not option in configurations:
+        configurations[option] = default_config[option]
+        
+# Open config in write mode to write the updated config
+with open("config.yml", "w") as config:
+    new_config = yaml.safe_dump(configurations)
+    config.write(new_config)
+    config.close()
+
+# Set config in utility scripts
+auth_server.set_config(configurations)
+database.set_config(configurations)
 
 app = FastAPI()
 
