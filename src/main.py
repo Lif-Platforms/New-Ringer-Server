@@ -158,16 +158,28 @@ def load_messages(username, token, conversation):
         return {'status': "Unsuccessful"}
     
 @app.get('/remove_conversation/{conversation_id}/{username}/{token}')
-def remove_conversation(conversation_id, username, token):
+async def remove_conversation(conversation_id, username, token):
     # Verify token 
     status = auth_server.verify_token(username, token)
 
     if status == "GOOD!":
+        # Get conversation members to notify later
+        members = database.get_members(conversation_id)
+
         # Use database interface to remove conversation
         remove_status = database.remove_conversation(conversation_id, username)
 
         # Check the status of the operation
         if remove_status == "OK":
+            # Notify conversation members
+            for member in members:
+                # Stops from notifying user that sent the request
+                if member != username:
+                    # Check if member is online
+                    for user in notification_sockets:
+                        if user["User"] == member:
+                            await user["Socket"].send_text(json.dumps({"Type": "REMOVE_CONVERSATION", "Id": conversation_id}))
+
             return {"Status": "Ok"}
         
         elif remove_status == "NO_PERMISSION":
