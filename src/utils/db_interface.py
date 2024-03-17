@@ -131,6 +131,8 @@ def accept_friend(account, friend):
     conn.commit()
     conn.close()
 
+    return conversation_id
+
 def deny_friend(username, deny_user): 
     # Connects to database
     conn = sqlite3.connect(configuration['Path-To-Database'])

@@ -70,12 +70,18 @@ def add_friend(username, token, add_user):
         return {"Status" : "Bad"}
     
 @app.get('/accept_friend_request/{username}/{token}/{accept_user}')
-def add_friend(username, token, accept_user): 
+async def add_friend(username, token, accept_user): 
     # Verifies token with auth server
     status = auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        database.accept_friend(account=username, friend=accept_user)
+        conversation_id = database.accept_friend(account=username, friend=accept_user)
+
+        # Notify sender request was accepted
+        for user in notification_sockets:
+            if user['User'] == accept_user:
+                await user['Socket'].send_text(json.dumps({"Type": "FRIEND_REQUEST_ACCEPT", "User": username, "Id": conversation_id}))
+                break
 
         return {"Status": "Ok"}
     else:
