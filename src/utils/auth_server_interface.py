@@ -5,7 +5,7 @@ def set_config(config):
     global configuration
     configuration = config
 
-def verify_token(username, token):
+async def verify_token(username, token):
     status = None
 
     response = requests.get(f"{configuration['auth-server-url']}/verify_token/{username}/{token}")

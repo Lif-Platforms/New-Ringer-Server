@@ -13,12 +13,12 @@ def set_config(config):
 conn = None
 
 # Function to establish a database connection
-def connect_to_database():
+async def connect_to_database():
     # Handle connecting to the database
     def connect():
         global conn
 
-        # Define configurations
+        # async Define configurations
         mysql_configs = {
             "host": configuration['mysql-host'],
             "port": configuration['mysql-port'],
@@ -43,8 +43,8 @@ def connect_to_database():
         if not conn.is_connected():
             connect()
 
-def get_friends_list(account):
-    connect_to_database()
+async def get_friends_list(account):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -64,10 +64,12 @@ def get_friends_list(account):
     else:
         friends_list = item[3]
 
+    print(friends_list)
+
     return friends_list
 
-def get_friend_requests(account):
-    connect_to_database()
+async def get_friend_requests(account):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -89,8 +91,8 @@ def get_friend_requests(account):
     
     return requests_list
 
-def add_new_friend(account, username): 
-    connect_to_database()
+async def add_new_friend(account, username): 
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -111,8 +113,8 @@ def add_new_friend(account, username):
 
         conn.commit()
 
-def accept_friend(account, friend): 
-    connect_to_database()
+async def accept_friend(account, friend): 
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -169,8 +171,8 @@ def accept_friend(account, friend):
 
     return conversation_id
 
-def deny_friend(username, deny_user): 
-    connect_to_database()
+async def deny_friend(username, deny_user): 
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -195,8 +197,8 @@ def deny_friend(username, deny_user):
     cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(friend_requests), username))
     conn.commit()
 
-def send_message(author, conversation_id, message):
-    connect_to_database()
+async def send_message(author, conversation_id, message):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -213,8 +215,8 @@ def send_message(author, conversation_id, message):
         cursor.execute("INSERT INTO messages (author, content, message_id, conversation_id) VALUES (%s, %s, %s, %s)", (author, message, message_id, conversation_id))
         conn.commit()
             
-def get_messages(conversation_id: str):
-    connect_to_database()
+async def get_messages(conversation_id: str):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -243,10 +245,12 @@ def get_messages(conversation_id: str):
         for message in database_messages:
             messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3]})
 
-    return messages
+        return messages
+    else:
+        raise Exception("Conversation Not Found")
 
-def get_members(conversation_id: str):
-    connect_to_database()
+async def get_members(conversation_id: str):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
@@ -260,8 +264,8 @@ def get_members(conversation_id: str):
 
     return members
 
-def remove_conversation(conversation_id: str, username: str):
-    connect_to_database()
+async def remove_conversation(conversation_id: str, username: str):
+    await connect_to_database()
 
     cursor = conn.cursor()
 
