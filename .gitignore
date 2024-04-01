@@ -3,3 +3,15 @@
 
 # ignore all enviroment variables
 .env
+
+# Config file
+config.yml
+
+# __pycache__ files
+__pycache__/
+
+# Virtual environments
+.venv/
+
+# Cert Files
+*.pem

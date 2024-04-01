@@ -1,295 +1,319 @@
 import sqlite3
-import yaml
+import mysql.connector
+from mysql.connector.constants import ClientFlag
 import json
 import uuid
 
-# Loads Config
-with open("config.yml", "r") as config:
-    configuration = yaml.safe_load(config)
+# Allows config to be set by main script
+def set_config(config):
+    global configuration
+    configuration = config
 
-def get_friends_list(account):
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+# Global database connection
+conn = None
+
+# Function to establish a database connection
+async def connect_to_database():
+    # Handle connecting to the database
+    def connect():
+        global conn
+
+        # async Define configurations
+        mysql_configs = {
+            "host": configuration['mysql-host'],
+            "port": configuration['mysql-port'],
+            "user": configuration['mysql-user'],
+            "password": configuration['mysql-password'],
+            "database": configuration['mysql-database'], 
+        }
+
+        # Check if SSL is enabled
+        if configuration['mysql-ssl']:
+            # Add ssl configurations to connection
+            mysql_configs['client_flags'] = [ClientFlag.SSL]
+            mysql_configs['ssl_ca'] = configuration['mysql-cert-path']
+
+        conn = mysql.connector.connect(**mysql_configs)
+    
+    # Check if there is a MySQL connection
+    if conn is None:
+        connect()
+    else:
+        # Check if existing connection is still alive
+        if not conn.is_connected():
+            connect()
+
+async def get_friends_list(account):
+    await connect_to_database()
+
+    cursor = conn.cursor()
 
     friends_list = None
 
     # Gets all data from the database
-    c.execute("SELECT * FROM accounts WHERE Account = ?", (account,))
-    item = c.fetchone()
+    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
+    item = cursor.fetchone()
 
     # Check if friends list is present
     # If not, then it will be created
     if not item:
-        c.execute("INSERT INTO accounts (Account, FreindRequests, Friends) VALUES (?, ?, ?)", (account, "[]", "[]"))
+        cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
         conn.commit()
 
         friends_list = "[]"
     else:
-        friends_list = item[2]
+        friends_list = item[3]
 
-    conn.close()
+    print(friends_list)
 
     return friends_list
 
-def get_friend_requests(account):
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+async def get_friend_requests(account):
+    await connect_to_database()
+
+    cursor = conn.cursor()
 
     # Gets all data from the database
-    c.execute("SELECT * FROM accounts WHERE Account = ?", (account,))
-    item = c.fetchone()
+    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
+    item = cursor.fetchone()
 
     requests_list = None
 
     # Check if friend requests list is present
     # If not, then it will be created
     if not item:
-        c.execute("INSERT INTO accounts (Account, FreindRequests, Friends) VALUES (?, ?, ?)", (account, "[]", "[]"))
+        cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
         conn.commit()
 
         requests_list = "[]"
     else:
-        requests_list = item[1]
-
-    conn.close()
+        requests_list = item[2]
     
     return requests_list
 
-def add_new_friend(account, username): 
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+async def add_new_friend(account, username): 
+    await connect_to_database()
+
+    cursor = conn.cursor()
 
     # Gets all data from the database
-    c.execute("SELECT * FROM accounts")
-    items = c.fetchall()
+    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
+    database_account = cursor.fetchone()
 
-    for item in items:
-        database_account = item[0]
+    # Check if account exists
+    if database_account:
+        # Load current requests
+        requests = json.loads(database_account[2])
 
-        if account == database_account:
-            requests = json.loads(item[1])
+        # Add request
+        requests.append({'name': username})
+        
+        # Update requests in database
+        cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(requests), account))
 
-            requests.append({'name': username})
+        conn.commit()
 
-            conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(requests)}'
-                                        WHERE Account = '{account}'""")
-            
-    conn.commit()
-    conn.close()
+async def accept_friend(account, friend): 
+    await connect_to_database()
 
-def accept_friend(account, friend): 
-    print("accepting friend request")
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+    cursor = conn.cursor()
 
-    # Gets all data from the database
-    c.execute("SELECT * FROM accounts")
-    items = c.fetchall()
+    # Get account and friend from database
+    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
+    database_account = cursor.fetchone()
 
-    # Generates a conversation id
+    cursor.execute("SELECT * FROM users WHERE account = %s", (friend,))
+    database_friend = cursor.fetchone()
+
+    # Generate a conversation id
     conversation_id = str(uuid.uuid4())
 
-    # Removes friend from pending requests
-    for item in items:
-        database_account = item[0]
+    # Load account friend requests
+    account_friend_requests = json.loads(database_account[2])
 
-        if database_account == account:
-            requests = json.loads(item[1])
-            new_requests_list = list(filter(lambda item: item["name"] != friend, requests))
+    # Keep track of list index
+    index = 0
 
-            conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(new_requests_list)}'
-                                        WHERE Account = '{account}'""")
-            
-            # Adds user to current friends
-            friends = json.loads(item[2])
-            friends.append({"Username": friend, "Id": conversation_id})
+    # Remove friend request
+    for request in account_friend_requests:
+        if request["name"] == friend:
+            account_friend_requests.remove(account_friend_requests[index]) 
+        else:
+            index += 1
 
-            # Updates in database
-            conn.execute(f"""UPDATE accounts SET Friends = '{json.dumps(friends)}'
-                                        WHERE Account = '{account}'""")
-            
-            # Creates a new conversation for the two users
-            conn.execute("INSERT INTO conversations (Id, Members, Messages) VALUES (?, ?, ?)", (conversation_id, json.dumps([account, friend]), "[]"))
-
-    # Adds request to senders friends list
-    for item in items:
-        database_account = item[0]
-
-        if database_account == friend:
-             # Adds user to current friends
-            friends = json.loads(item[2])
-            friends.append({"Username": account, "Id": conversation_id})
-
-            # Updates in database
-            conn.execute(f"""UPDATE accounts SET Friends = '{json.dumps(friends)}'
-                                        WHERE Account = '{friend}'""")
-
+    # Update database
+    cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(account_friend_requests), account))
     conn.commit()
-    conn.close()
+
+    # Load account friends
+    account_friends = json.loads(database_account[3])
+
+    # Add friend to account
+    account_friends.append({"Username": friend, "Id": conversation_id})
+
+    # Update database
+    cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(account_friends), account))
+    conn.commit()
+
+    # Load friend's friends
+    friend_friends = json.loads(database_friend[3])
+
+    # Add friend
+    friend_friends.append({"Username": friend, "Id": conversation_id})
+
+    # Update database
+    cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(friend_friends), friend))
+    conn.commit()
+
+    # Create conversation
+    cursor.execute("INSERT INTO conversations (conversation_id, members) VALUES (%s, %s)", (conversation_id, json.dumps([account, friend])))
+    conn.commit()
 
     return conversation_id
 
-def deny_friend(username, deny_user): 
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+async def deny_friend(username, deny_user): 
+    await connect_to_database()
 
-    # Gets all data from the database
-    c.execute("SELECT * FROM accounts")
-    items = c.fetchall()
+    cursor = conn.cursor()
 
-    # Find user in database
-    for user in items:
-        database_user = user[0]
-        if username == database_user:
-            # Get current pending friend requests
-            requests = json.loads(user[1])
+    # Get account requests
+    cursor.execute("SELECT * FROM users WHERE account = %s", (username,))
+    account = cursor.fetchone()
 
-            new_requests = [item for item in requests if item.get("name") != deny_user]
+    # Load friend requests
+    friend_requests = json.loads(account[2])
 
-            # Update requests in database
-            conn.execute(f"""UPDATE accounts SET FreindRequests = '{json.dumps(new_requests)}'
-                                        WHERE Account = '{username}'""")
+    # Keep track of list index
+    index = 0
 
-            break
-    
+    # Remove user
+    for request in friend_requests:
+        if request["name"] == deny_user:
+            friend_requests.remove(friend_requests[index])
+        else:
+            index += 1
+
+    # Update database
+    cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(friend_requests), username))
     conn.commit()
-    conn.close()
 
-def send_message(author, conversation_id, message):
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+async def send_message(author, conversation_id, message):
+    await connect_to_database()
 
-    # Gets all data from the database
-    c.execute("SELECT * FROM conversations")
-    items = c.fetchall()
+    cursor = conn.cursor()
 
-    for item in items:
-        database_conversation = item[0]
+    # Get conversation
+    cursor.execute("SELECT * FROM conversations WHERE conversation_id = %s", (conversation_id,))
+    conversation = cursor.fetchone()
 
-        if database_conversation == conversation_id:
-            data = json.loads(item[2])
+    # Check if conversation exists
+    if conversation:
+        # Generate random message id
+        message_id = str(uuid.uuid4())
 
-            append_data = {"Author": author, "Message": message}
-
-            data.append(append_data)
-
-            # Updates in database
-            conn.execute(f"""UPDATE conversations SET Messages = '{json.dumps(data)}'
-                                        WHERE Id = '{conversation_id}'""")
-    conn.commit()
-    conn.close()
+        # Insert message into database
+        cursor.execute("INSERT INTO messages (author, content, message_id, conversation_id) VALUES (%s, %s, %s, %s)", (author, message, message_id, conversation_id))
+        conn.commit()
             
-def get_messages(conversation_id: str):
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
+async def get_messages(conversation_id: str):
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    # Get conversation
+    cursor.execute("SELECT * FROM conversations WHERE conversation_id = %s", (conversation_id,))
+    conversation = cursor.fetchone()
+
+    # Used for formatting messages
+    messages = []
+
+    # Check if conversation exists
+    if conversation:
+        # Get all messages
+        cursor.execute("""SELECT * FROM (
+                            SELECT *
+                            FROM messages
+                            WHERE conversation_id = %s
+                            ORDER BY id DESC
+                            LIMIT 20
+                        ) AS anyVariableName
+                        ORDER BY anyVariableName.id ASC;
+                       """, (conversation_id,))
+        database_messages = cursor.fetchall()
+
+        # Format messages
+        for message in database_messages:
+            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3]})
+
+        return messages
+    else:
+        raise Exception("Conversation Not Found")
+
+async def get_members(conversation_id: str):
+    await connect_to_database()
+
+    cursor = conn.cursor()
 
     # Gets all data from the database
-    c.execute("SELECT * FROM conversations")
-    items = c.fetchall()
+    cursor.execute("SELECT * FROM conversations WHERE conversation_id = %s", (conversation_id,))
+    conversation = cursor.fetchone()
 
-    messages = False
-
-    # Find conversation
-    for item in items:
-        database_conversation_id = item[0]
-
-        if conversation_id == database_conversation_id:
-            messages = json.loads(item[2])
-
-    return messages
-
-def get_members(conversation_id: str):
-    # Connects to database
-    conn = sqlite3.connect(configuration['Path-To-Database'])
-    c = conn.cursor()
-
-    # Gets all data from the database
-    c.execute("SELECT * FROM conversations")
-    items = c.fetchall()
-
-    members = False
-
-    # Find conversation
-    for item in items:
-        database_conversation_id = item[0]
-
-        if conversation_id == database_conversation_id:
-            members = json.loads(item[1])
+    # Check if conversation exists
+    if conversation:
+        members = json.loads(conversation[2])
 
     return members
 
-def remove_conversation(conversation_id: str, username: str):
-    try:
-        # Connects to the database
-        conn = sqlite3.connect(configuration['Path-To-Database'])
-        c = conn.cursor()
+async def remove_conversation(conversation_id: str, username: str):
+    await connect_to_database()
 
-        # Get all entries from the conversations table
-        c.execute("SELECT * FROM conversations")
-        conversation_items = c.fetchall()
+    cursor = conn.cursor()
 
-        found_conversation = False
+    # Get conversation
+    cursor.execute("SELECT * FROM conversations WHERE conversation_id = %s", (conversation_id,))
+    conversation = cursor.fetchone()
 
-        # Used to remove the conversation id from the members of this conversation
-        conversation_members = []
+    # Check if conversation exists
+    if conversation:
+        # Get conversation members
+        conversation_members = json.loads(conversation[2])
 
-        for conversation in conversation_items:
-            database_conversation = conversation[0]
+        # Check if user is a member of this conversation
+        if username in conversation_members:
+            # Delete conversation
+            cursor.execute("DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,))
+            conn.commit()
 
-            if database_conversation == conversation_id:
-                members = json.loads(conversation[1])
+            # Delete conversation messages
+            cursor.execute("DELETE FROM messages WHERE conversation_id = %s", (conversation_id,))
+            conn.commit()
 
-                # Check if user is a member of the conversation
-                # If not, return a NO_PERMISSION error
-                if username in members:
-                    conversation_members = members
+            # For each member, remove conversation from friends
+            for member in conversation_members:
+                # Get member account
+                cursor.execute("SELECT * FROM users WHERE account = %s", (member,))
+                member_account = cursor.fetchone()
 
-                    # Remove database entry
-                    c.execute("DELETE FROM conversations WHERE Id = ?", (conversation_id,))
-                    conn.commit()
+                # Get member friends
+                member_friends = json.loads(member_account[3])
 
-                    # Get all entries from the accounts table
-                    c.execute("SELECT * FROM accounts")
-                    account_items = c.fetchall()
+                # Keep track of list index
+                index = 0
 
-                    # Find and remove conversation id from conversation members
-                    for member in conversation_members:
-                        for account in account_items:
-                            if account[0] == member:
-                                # Load data from database
-                                friends_data = json.loads(account[2])
+                # Remove conversation
+                for friend in member_friends:
+                    if friend["Id"] == conversation_id:
+                        member_friends.remove(member_friends[index])
 
-                                try:
-                                    # Remove conversation from friends data
-                                    new_friends_data = [item for item in friends_data if item.get('Id') != conversation_id]
+                        # Update member friends
+                        cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(member_friends), member))
+                        conn.commit()
+                    else:
+                        index += 1
 
-                                    # Update database
-                                    conn.execute("UPDATE accounts SET Friends = ? WHERE Account = ?",
-                                                 (json.dumps(new_friends_data), member))
-                                except KeyError:
-                                    pass
+            return "OK"
 
-                    conn.commit()
-                    conn.close()
-
-                    return "OK"
-                else:
-                    conn.close()
-                    return "NO_PERMISSION"
-        
-        # If conversation_id is not found
-        conn.close()
+        else:
+            return "NO_PERMISSION"
+    else:   
         return "CONVERSATION_NOT_FOUND"
-
-    except Exception as e:
-        # Handle exceptions and log errors
-        print(f"Error: {e}")
-        return "ERROR"
-    

@@ -1,0 +1,10 @@
+{
+    "mysql-host": "localhost",
+    "mysql-port": 3306,
+    "mysql-user": "root",
+    "mysql-password": "test123",
+    "mysql-database": "Lif_Accounts",
+    "mysql-ssl": false,
+    "mysql-cert-path": "INSERT PATH HERE",
+    "auth-server-url": "INSERT URL HERE"
+}

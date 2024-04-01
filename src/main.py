@@ -5,6 +5,43 @@ import utils.db_interface as database
 import json
 import uvicorn
 from fastapi import Request
+import os
+import yaml
+
+resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
+
+if not os.path.isfile("config.yml"):
+    with open("config.yml", 'x') as config:
+        config.close()
+
+with open("config.yml", "r") as config:
+    contents = config.read()
+    configurations = yaml.safe_load(contents)
+    config.close()
+
+# Ensure the configurations are not None
+if configurations == None:
+    configurations = {}
+
+# Open reference json file for config
+with open(f"{resources_folder}/json data/default_config.json", "r") as json_file:
+    json_data = json_file.read()
+    default_config = json.loads(json_data)
+    
+# Compare config with json data
+for option in default_config:
+    if not option in configurations:
+        configurations[option] = default_config[option]
+        
+# Open config in write mode to write the updated config
+with open("config.yml", "w") as config:
+    new_config = yaml.safe_dump(configurations)
+    config.write(new_config)
+    config.close()
+
+# Set config in utility scripts
+auth_server.set_config(configurations)
+database.set_config(configurations)
 
 app = FastAPI()
 
@@ -15,16 +52,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 notification_sockets = []
 
 @app.get('/')
-def home():
+async def home():
     return 'Welcome to the Ringer API!'
 
 @app.get('/get_friends_list/{username}/{token}')
-def get_friends(username: str, token: str):
-    status = auth_server.verify_token(username, token)
+async def get_friends(username: str, token: str):
+    status = await auth_server.verify_token(username, token)
 
     # Checks the status of the verification
     if status == "GOOD!":
-        friends_list = database.get_friends_list(username)
+        friends_list = await database.get_friends_list(username)
 
         load_friends_list = json.loads(friends_list)
         print(type(load_friends_list))
@@ -38,12 +75,12 @@ def get_friends(username: str, token: str):
         raise HTTPException(status_code=500, detail="Internal server error!")
 
 @app.get('/get_friend_requests/{username}/{token}')
-def get_friend_requests(username: str, token: str):
+async def get_friend_requests(username: str, token: str):
     # Verifies token with auth server
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        requests_list = database.get_friend_requests(account=username)
+        requests_list = await database.get_friend_requests(account=username)
 
         if requests_list:
             return requests_list
@@ -57,12 +94,12 @@ def get_friend_requests(username: str, token: str):
         raise HTTPException(status_code=500, detail="Internal server error!")
     
 @app.get('/add_friend/{username}/{token}/{add_user}') 
-def add_friend(username, token, add_user):
+async def add_friend(username, token, add_user):
     # Verifies token with auth server
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        database.add_new_friend(account=add_user, username=username)
+        await database.add_new_friend(account=add_user, username=username)
 
         return {"Status": "Ok"}
     
@@ -72,10 +109,10 @@ def add_friend(username, token, add_user):
 @app.get('/accept_friend_request/{username}/{token}/{accept_user}')
 async def add_friend(username, token, accept_user): 
     # Verifies token with auth server
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        conversation_id = database.accept_friend(account=username, friend=accept_user)
+        conversation_id = await database.accept_friend(account=username, friend=accept_user)
 
         # Notify sender request was accepted
         for user in notification_sockets:
@@ -88,12 +125,12 @@ async def add_friend(username, token, accept_user):
         return {"Status": "Unsuccessful"}
     
 @app.get('/deny_friend_request/{username}/{token}/{deny_user}')
-def deny_friend(username, token, deny_user):
+async def deny_friend(username, token, deny_user):
     # Verifies token with auth server
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        database.deny_friend(username, deny_user)
+        await database.deny_friend(username, deny_user)
 
         return {"Status": "Ok"}
     else:
@@ -108,13 +145,13 @@ async def send_message(request: Request):
     conversation_id = data.get('conversation_id')
 
     # Verifies token
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
-        database.send_message(username, conversation_id, message)
+        await database.send_message(username, conversation_id, message)
 
         # Get conversation members
-        conversation_members = database.get_members(conversation_id)
+        conversation_members = await database.get_members(conversation_id)
 
         print(notification_sockets)
 
@@ -141,18 +178,21 @@ async def send_message(request: Request):
         return {"Status": "Unsuccessful"}
     
 @app.get('/load_messages/{username}/{token}/{conversation}')
-def load_messages(username, token, conversation):
+async def load_messages(username, token, conversation):
     # Verify token 
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == 'GOOD!':
-        messages = database.get_messages(conversation)
+        try:
+            messages = await database.get_messages(conversation)
 
-        # Remove all but the last 20 messages
-        if len(messages) > 20:
-            messages = messages[-20:]
+            # Remove all but the last 20 messages
+            if len(messages) > 20:
+                messages = messages[-20:]
 
-        return messages
+            return messages
+        except:
+            raise HTTPException(status_code=404, detail="Conversation Not Found")
     
     else:
         return {'status': "Unsuccessful"}
@@ -160,14 +200,14 @@ def load_messages(username, token, conversation):
 @app.get('/remove_conversation/{conversation_id}/{username}/{token}')
 async def remove_conversation(conversation_id, username, token):
     # Verify token 
-    status = auth_server.verify_token(username, token)
+    status = await auth_server.verify_token(username, token)
 
     if status == "GOOD!":
         # Get conversation members to notify later
-        members = database.get_members(conversation_id)
+        members = await database.get_members(conversation_id)
 
         # Use database interface to remove conversation
-        remove_status = database.remove_conversation(conversation_id, username)
+        remove_status = await database.remove_conversation(conversation_id, username)
 
         # Check the status of the operation
         if remove_status == "OK":
@@ -203,7 +243,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             if not authenticated:
                 auth_details = json.loads(await websocket.receive_text())
-                status = auth_server.verify_token(auth_details['Username'], auth_details['Token'])
+                status = await auth_server.verify_token(auth_details['Username'], auth_details['Token'])
                 if status == "GOOD!":
                     await websocket.send_text(json.dumps({"Status": "Ok"}))
                     authenticated = True
@@ -219,12 +259,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 if data["MessageType"] == "SEND_MESSAGE":
                     # Get conversation members to ensure authorization
-                    members = database.get_members(data["ConversationId"])
+                    members = await database.get_members(data["ConversationId"])
 
                     # Check if user is a member of the conversation
                     if username in members:
                         # Add message to database
-                        database.send_message(username, data["ConversationId"], data["Message"])
+                        await database.send_message(username, data["ConversationId"], data["Message"])
 
                         # Tell client message was sent
                         await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT"}))
