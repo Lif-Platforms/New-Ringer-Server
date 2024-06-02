@@ -7,6 +7,7 @@ import uvicorn
 from fastapi import Request
 import os
 import yaml
+from __version__ import version
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -43,7 +44,11 @@ with open("config.yml", "w") as config:
 auth_server.set_config(configurations)
 database.set_config(configurations)
 
-app = FastAPI()
+app = FastAPI(
+    title="Ringer Server",
+    description="Official server for the Ringer messaging app.",
+    version=version
+)
 
 # Allow Cross-Origin Resource Sharing (CORS) for all origins
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
