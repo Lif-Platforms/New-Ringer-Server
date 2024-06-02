@@ -1,5 +1,5 @@
 fastapi==0.109.1
-requests==2.31.0
+requests==2.32.0
 PyYaml==6.0
 uuid==1.30
 uvicorn==0.22.0
