@@ -442,6 +442,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     notification_sockets.append(user_socket)
                     username = auth_details['Username']
                     print(notification_sockets)
+
+                    friends = json.loads(await database.get_friends_list(username))
+
+                    # Send status update to all online friends
+                    for friend in friends:
+                        # Check if the friend is online by looking for their socket in notification_sockets
+                        for socket in notification_sockets:
+                            if socket['User'] == friend["Username"]:
+                                # If the friend is online, send them the message
+                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True}))
                 else:
                     await websocket.send_text(json.dumps({"Status": "Failed", "Reason": "INVALID_TOKEN"}))
                     await websocket.close()
@@ -473,8 +483,17 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if authenticated:
             notification_sockets.remove(user_socket)
-            # Handle client disconnection
-            pass
+
+            # Get users friends
+            friends = json.loads(await database.get_friends_list(username))
+
+            # Send status update to all online friends
+            for friend in friends:
+                # Check if the friend is online by looking for their socket in notification_sockets
+                for socket in notification_sockets:
+                    if socket['User'] == friend["Username"]:
+                        # If the friend is online, send them the message
+                        await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False}))
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)
