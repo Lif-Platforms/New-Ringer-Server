@@ -90,6 +90,14 @@ async def get_friends_v2(request: Request):
     if status == "GOOD!":
         friends_list = json.loads(await database.get_friends_list(username))
 
+        # Cycle through friends and add their online status
+        for friend in friends_list:
+            # Check if any socket in notification_sockets has the same User as the friend
+            if any(socket['User'] == friend["Username"] for socket in notification_sockets):
+                friend["Online"] = True
+            else:
+                friend["Online"] = False
+
         return friends_list
     
     elif status == "INVALID_TOKEN":
