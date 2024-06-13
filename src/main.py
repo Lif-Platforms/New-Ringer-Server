@@ -451,7 +451,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         for socket in notification_sockets:
                             if socket['User'] == friend["Username"]:
                                 # If the friend is online, send them the message
-                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True}))
+                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}))
                 else:
                     await websocket.send_text(json.dumps({"Status": "Failed", "Reason": "INVALID_TOKEN"}))
                     await websocket.close()
@@ -493,7 +493,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 for socket in notification_sockets:
                     if socket['User'] == friend["Username"]:
                         # If the friend is online, send them the message
-                        await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False}))
+                        await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False, "User": username}))
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)
