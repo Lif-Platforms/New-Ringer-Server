@@ -4,7 +4,6 @@ import utils.auth_server_interface as auth_server
 import utils.db_interface as database
 import json
 import uvicorn
-from fastapi import Request
 import os
 import yaml
 from __version__ import version
@@ -80,7 +79,7 @@ async def get_friends(username: str, token: str):
         raise HTTPException(status_code=500, detail="Internal server error!")
     
 @app.get("/get_friends")
-async def get_friends(request: Request):
+async def get_friends_v2(request: Request):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -119,7 +118,7 @@ async def get_friend_requests(username: str, token: str):
         raise HTTPException(status_code=500, detail="Internal server error!")
     
 @app.get("/get_friend_requests")
-async def get_friend_requests(request: Request):
+async def get_friend_requests_v2(request: Request):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -153,7 +152,7 @@ async def add_friend(username, token, add_user):
         return {"Status" : "Bad"}
     
 @app.post("/add_friend")
-async def add_friend(request: Request, user: str = Form()):
+async def add_friend_v2(request: Request, user: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -192,7 +191,7 @@ async def add_friend(username, token, accept_user):
         return {"Status": "Unsuccessful"}
     
 @app.post("/accept_friend_request")
-async def accept_friend_request(request: Request, user: str = Form()):
+async def accept_friend_request_v2(request: Request, user: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -231,7 +230,7 @@ async def deny_friend(username, token, deny_user):
         return HTTPException(status_code=401, detail="Invalid Token!")
     
 @app.post("/deny_friend_request")
-async def deny_friend(request: Request, user: str = Form()):
+async def deny_friend_v2(request: Request, user: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -313,7 +312,7 @@ async def load_messages(username, token, conversation):
         return {'status': "Unsuccessful"}
     
 @app.get("/load_messages/{conversation_id}")
-async def load_messages(request: Request, conversation_id: str):
+async def load_messages_v2(request: Request, conversation_id: str):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -374,7 +373,7 @@ async def remove_conversation(conversation_id, username, token):
         raise HTTPException(status_code=401, detail="Invalid token!")
     
 @app.delete("/remove_conversation/{conversation_id}")
-async def remove_conversation(request: Request, conversation_id: str):
+async def remove_conversation_v2(request: Request, conversation_id: str):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
