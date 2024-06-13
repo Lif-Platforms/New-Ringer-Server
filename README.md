@@ -1,8 +1,11 @@
 ![Ringer Logo](https://github.com/Lif-Platforms/Ringer-Client-Windows/blob/main/.github/Ringerlogo.png)
-![GitHub](https://img.shields.io/github/license/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
-![GitHub all releases](https://img.shields.io/github/downloads/Lif-Platforms/New-Ringer-Server/total?style=for-the-badge)
-![GitHub contributors](https://img.shields.io/github/contributors/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
-![GitHub issues](https://img.shields.io/github/issues/Lif-Platforms/New-Ringer-Server?style=for-the-badge)
+<div align="center">
+  <img src="https://img.shields.io/github/license/Lif-Platforms/New-Ringer-Server?style=for-the-badge">
+  <img src="https://img.shields.io/github/downloads/Lif-Platforms/New-Ringer-Server/total?style=for-the-badge">
+  <img src="https://img.shields.io/github/contributors/Lif-Platforms/New-Ringer-Server?style=for-the-badge">
+  <img src="https://img.shields.io/github/issues/Lif-Platforms/New-Ringer-Server?style=for-the-badge">
+  <img alt="Codacy grade" src="https://img.shields.io/codacy/grade/804c94472e5049dabcb1337a452ab12b?style=for-the-badge">
+</div>
 
 
 # 🌐 New-Ringer-Server
