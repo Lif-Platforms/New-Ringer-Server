@@ -1,10 +1,9 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 import utils.auth_server_interface as auth_server
 import utils.db_interface as database
 import json
 import uvicorn
-from fastapi import Request
 import os
 import yaml
 from __version__ import version
@@ -78,6 +77,26 @@ async def get_friends(username: str, token: str):
 
     else:
         raise HTTPException(status_code=500, detail="Internal server error!")
+    
+@app.get("/get_friends")
+async def get_friends_v2(request: Request):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verify user token
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        friends_list = json.loads(await database.get_friends_list(username))
+
+        return friends_list
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get('/get_friend_requests/{username}/{token}')
 async def get_friend_requests(username: str, token: str):
@@ -98,6 +117,27 @@ async def get_friend_requests(username: str, token: str):
     else:
         raise HTTPException(status_code=500, detail="Internal server error!")
     
+@app.get("/get_friend_requests")
+async def get_friend_requests_v2(request: Request):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verify user token
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Get user friends list
+        requests_list = await database.get_friend_requests(account=username)
+
+        return json.loads(requests_list)
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 @app.get('/add_friend/{username}/{token}/{add_user}') 
 async def add_friend(username, token, add_user):
     # Verifies token with auth server
@@ -110,6 +150,27 @@ async def add_friend(username, token, add_user):
     
     else: 
         return {"Status" : "Bad"}
+    
+@app.post("/add_friend")
+async def add_friend_v2(request: Request, user: str = Form()):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Add request to database
+        await database.add_new_friend(account=user, username=username)
+
+        return "Request Sent!"
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @app.get('/accept_friend_request/{username}/{token}/{accept_user}')
 async def add_friend(username, token, accept_user): 
@@ -129,6 +190,33 @@ async def add_friend(username, token, accept_user):
     else:
         return {"Status": "Unsuccessful"}
     
+@app.post("/accept_friend_request")
+async def accept_friend_request_v2(request: Request, user: str = Form()):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Accept friend request and get new conversation id
+        conversation_id = await database.accept_friend(account=username, friend=user)
+
+        # Notify sender request was accepted (if online)
+        for user in notification_sockets:
+            if user['User'] == user:
+                await user['Socket'].send_text(json.dumps({"Type": "FRIEND_REQUEST_ACCEPT", "User": username, "Id": conversation_id}))
+                break
+
+        return "Request Accepted!"
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 @app.get('/deny_friend_request/{username}/{token}/{deny_user}')
 async def deny_friend(username, token, deny_user):
     # Verifies token with auth server
@@ -140,6 +228,27 @@ async def deny_friend(username, token, deny_user):
         return {"Status": "Ok"}
     else:
         return HTTPException(status_code=401, detail="Invalid Token!")
+    
+@app.post("/deny_friend_request")
+async def deny_friend_v2(request: Request, user: str = Form()):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Deny friend request
+        await database.deny_friend(username, user)
+
+        return "Request Denied!"
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @app.post('/send_message')
 async def send_message(request: Request):
@@ -202,6 +311,34 @@ async def load_messages(username, token, conversation):
     else:
         return {'status': "Unsuccessful"}
     
+@app.get("/load_messages/{conversation_id}")
+async def load_messages_v2(request: Request, conversation_id: str):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        try:
+            # Get all messages from database
+            messages = await database.get_messages(conversation_id)
+
+            # Remove all but the last 20 messages
+            if len(messages) > 20:
+                messages = messages[-20:]
+
+            return messages
+        except:
+            raise HTTPException(status_code=404, detail="Conversation Not Found")
+        
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 @app.get('/remove_conversation/{conversation_id}/{username}/{token}')
 async def remove_conversation(conversation_id, username, token):
     # Verify token 
@@ -234,6 +371,47 @@ async def remove_conversation(conversation_id, username, token):
             raise HTTPException(status_code=500, detail="Internal Server Error!")
     else:
         raise HTTPException(status_code=401, detail="Invalid token!")
+    
+@app.delete("/remove_conversation/{conversation_id}")
+async def remove_conversation_v2(request: Request, conversation_id: str):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Get conversation members to notify later
+        members = await database.get_members(conversation_id)
+
+        # Use database interface to remove conversation
+        remove_status = await database.remove_conversation(conversation_id, username)
+
+        # Check the status of the operation
+        if remove_status == "OK":
+            # Notify conversation members
+            for member in members:
+                # Stops from notifying user that sent the request
+                if member != username:
+                    # Check if member is online
+                    for user in notification_sockets:
+                        if user["User"] == member:
+                            await user["Socket"].send_text(json.dumps({"Type": "REMOVE_CONVERSATION", "Id": conversation_id}))
+
+            return "Conversation Removed!"
+        
+        elif remove_status == "NO_PERMISSION":
+            raise HTTPException(status_code=403, detail="No Permission!")
+        
+        else:
+            raise HTTPException(status_code=500, detail="Internal Server Error!")
+        
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid token!")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error!")
     
 @app.websocket("/live_updates")
 async def websocket_endpoint(websocket: WebSocket):
