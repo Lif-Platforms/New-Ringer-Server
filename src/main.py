@@ -131,7 +131,7 @@ async def get_friend_requests(request: Request):
         # Get user friends list
         requests_list = await database.get_friend_requests(account=username)
 
-        return requests_list
+        return json.loads(requests_list)
     
     elif status == "INVALID_TOKEN":
         raise HTTPException(status_code=401, detail="Invalid Token")
@@ -230,6 +230,27 @@ async def deny_friend(username, token, deny_user):
     else:
         return HTTPException(status_code=401, detail="Invalid Token!")
     
+@app.post("/deny_friend_request")
+async def deny_friend(request: Request, user: str = Form()):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Deny friend request
+        await database.deny_friend(username, user)
+
+        return "Request Denied!"
+    
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 @app.post('/send_message')
 async def send_message(request: Request):
     data = await request.json()  # Parse JSON data from the request body
@@ -291,6 +312,34 @@ async def load_messages(username, token, conversation):
     else:
         return {'status': "Unsuccessful"}
     
+@app.get("/load_messages/{conversation_id}")
+async def load_messages(request: Request, conversation_id: str):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        try:
+            # Get all messages from database
+            messages = await database.get_messages(conversation_id)
+
+            # Remove all but the last 20 messages
+            if len(messages) > 20:
+                messages = messages[-20:]
+
+            return messages
+        except:
+            raise HTTPException(status_code=404, detail="Conversation Not Found")
+        
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 @app.get('/remove_conversation/{conversation_id}/{username}/{token}')
 async def remove_conversation(conversation_id, username, token):
     # Verify token 
@@ -323,6 +372,47 @@ async def remove_conversation(conversation_id, username, token):
             raise HTTPException(status_code=500, detail="Internal Server Error!")
     else:
         raise HTTPException(status_code=401, detail="Invalid token!")
+    
+@app.delete("/remove_conversation/{conversation_id}")
+async def remove_conversation(request: Request, conversation_id: str):
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    status = await auth_server.verify_token(username, token)
+
+    if status == "GOOD!":
+        # Get conversation members to notify later
+        members = await database.get_members(conversation_id)
+
+        # Use database interface to remove conversation
+        remove_status = await database.remove_conversation(conversation_id, username)
+
+        # Check the status of the operation
+        if remove_status == "OK":
+            # Notify conversation members
+            for member in members:
+                # Stops from notifying user that sent the request
+                if member != username:
+                    # Check if member is online
+                    for user in notification_sockets:
+                        if user["User"] == member:
+                            await user["Socket"].send_text(json.dumps({"Type": "REMOVE_CONVERSATION", "Id": conversation_id}))
+
+            return "Conversation Removed!"
+        
+        elif remove_status == "NO_PERMISSION":
+            raise HTTPException(status_code=403, detail="No Permission!")
+        
+        else:
+            raise HTTPException(status_code=500, detail="Internal Server Error!")
+        
+    elif status == "INVALID_TOKEN":
+        raise HTTPException(status_code=401, detail="Invalid token!")
+    
+    else:
+        raise HTTPException(status_code=500, detail="Internal Server Error!")
     
 @app.websocket("/live_updates")
 async def websocket_endpoint(websocket: WebSocket):
