@@ -159,7 +159,7 @@ async def accept_friend(account, friend):
     friend_friends = json.loads(database_friend[3])
 
     # Add friend
-    friend_friends.append({"Username": friend, "Id": conversation_id})
+    friend_friends.append({"Username": account, "Id": conversation_id})
 
     # Update database
     cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(friend_friends), friend))
