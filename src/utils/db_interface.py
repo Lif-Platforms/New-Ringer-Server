@@ -341,10 +341,17 @@ async def add_mobile_notifications_device(push_token: str, account: str):
 
     if database_push_token:
         # Update expiration date
-        cursor.execute("UPDATE push_notifications SET expires = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE push_token = %s", (push_token,))
+        cursor.execute("""
+            UPDATE push_notifications
+            SET expires = DATE_ADD(NOW(), INTERVAL 30 DAY)
+            WHERE push_token = %s;
+        """, (push_token,))
         conn.commit()
     else:
-        cursor.execute("INSERT INTO push_notifications (push_token, account, expires) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 30 DAY))", (push_token, account,))
+        cursor.execute("""
+            INSERT INTO push_notifications (push_token, account, expires) 
+            VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 30 DAY))
+        """, (push_token, account,))
         conn.commit()
 
 async def get_mobile_push_token(account: str):
