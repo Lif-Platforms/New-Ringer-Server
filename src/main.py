@@ -495,5 +495,27 @@ async def websocket_endpoint(websocket: WebSocket):
                         # If the friend is online, send them the message
                         await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False, "User": username}))
 
+@app.post("/register_push_notifications/{device_type}")
+async def register_push_notifications(request: Request, device_type: str):
+    # Get auth info
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verify auth info
+    if await auth_server.verify_token(username, token) == "GOOD!":
+        # Check device type
+        if device_type == "mobile":
+            # Get push token from body
+            body = await request.json()
+            push_token = body.get("push-token")
+
+            await database.add_mobile_notifications_device(push_token, username)
+
+            return "Ok"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid device type. Supported types: 'mobile'.")
+    else:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)

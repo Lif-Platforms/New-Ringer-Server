@@ -317,3 +317,59 @@ async def remove_conversation(conversation_id: str, username: str):
             return "NO_PERMISSION"
     else:   
         return "CONVERSATION_NOT_FOUND"
+    
+async def add_mobile_notifications_device(push_token: str, account: str):
+    """
+    ## Add Mobile Notifications Device
+    Register a mobile device for Expos push notifications API.
+
+    ### Parameters
+    - push_token: The unique identifier needed to send a notification to the device.
+
+    - account: The account the device is being registered to.
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    # Ensure registration doesn't already exist
+    cursor.execute("SELECT push_token FROM push_notifications WHERE push_token = %s", (push_token,))
+    database_push_token = cursor.fetchone()
+
+    if database_push_token:
+        # Update expiration date
+        cursor.execute("UPDATE push_notifications SET expires = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE push_token = %s", (push_token,))
+        conn.commit()
+    else:
+        cursor.execute("INSERT INTO push_notifications (push_token, account, expires) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 30 DAY))", (push_token, account,))
+        conn.commit()
+
+async def get_mobile_push_token(account: str):
+    """
+    ## Get Mobile Push Token
+    Get the expo push token for a mobile device.
+
+    ### Parameters
+    - account: The account you want to grab devices for.
+
+    ### Returns
+    list: All expo push tokens for an account.
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    # Get all tokens from database
+    cursor.execute("SELECT push_token FROM push_notifications WHERE account = %s", (account,))
+    tokens = cursor.fetchall()
+
+    format_tokens = []
+
+    # Format results
+    for token in tokens:
+        format_tokens.append(token[0])
+
+    return format_tokens
