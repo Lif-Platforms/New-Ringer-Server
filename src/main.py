@@ -519,8 +519,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
                                 if not exists:
                                     asyncio.ensure_future(send_push_notification(
-                                        username, data['Message'], 
-                                        {"conversation_id": data['ConversationId']}, 
+                                        username, data['Message'],
+                                        {"conversation_id": data['ConversationId']},
                                         member
                                     ))
                     else:
