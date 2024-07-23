@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Form
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import utils.auth_server_interface as auth_server
 import utils.db_interface as database
@@ -7,6 +7,7 @@ import uvicorn
 import os
 import yaml
 from __version__ import version
+import requests
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -54,6 +55,31 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # List users currently connected to the notification service
 notification_sockets = []
+
+async def send_push_notification(title: str, body: str, data: dict, account: str):
+    # Get push tokens from database
+    push_tokens = await database.get_mobile_push_token(account)
+
+    print("Push Tokens For " + account + ":")
+    print(push_tokens)
+
+    # Check if database returned any tokens
+    if len(push_tokens) > 0:
+        # Create messages to send to clients
+        messages = []
+
+        for token in push_tokens:
+            messages.append({
+                'to': token,
+                'title': title,
+                'body': body,
+                'data': data,
+            })
+        
+        # Send notifications to devices
+        requests.post("https://exp.host/--/api/v2/push/send", json=messages)
+
+        print("sent push notification to: " + account)
 
 @app.get('/')
 async def home():
@@ -160,7 +186,7 @@ async def add_friend(username, token, add_user):
         return {"Status" : "Bad"}
     
 @app.post("/add_friend")
-async def add_friend_v2(request: Request, user: str = Form()):
+async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, user: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -171,6 +197,12 @@ async def add_friend_v2(request: Request, user: str = Form()):
     if status == "GOOD!":
         # Add request to database
         await database.add_new_friend(account=user, username=username)
+
+        exists = any(socket['User'] == user for socket in notification_sockets)
+
+        # Checks if recipient is online. If not, a push notification will be sent to their devices
+        if not exists:
+            background_tasks.add_task(send_push_notification, username, f"{username} sent you a friend request!", {}, user)
 
         return "Request Sent!"
     
@@ -199,7 +231,7 @@ async def add_friend(username, token, accept_user):
         return {"Status": "Unsuccessful"}
     
 @app.post("/accept_friend_request")
-async def accept_friend_request_v2(request: Request, user: str = Form()):
+async def accept_friend_request_v2(request: Request, background_tasks: BackgroundTasks, user: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -216,6 +248,12 @@ async def accept_friend_request_v2(request: Request, user: str = Form()):
             if user['User'] == user:
                 await user['Socket'].send_text(json.dumps({"Type": "FRIEND_REQUEST_ACCEPT", "User": username, "Id": conversation_id}))
                 break
+
+        exists = any(socket['User'] == user for socket in notification_sockets)
+
+        # Checks if recipient is online. If not, a push notification will be sent to their devices
+        if not exists:
+            background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, user)
 
         return "Request Accepted!"
     
@@ -422,7 +460,7 @@ async def remove_conversation_v2(request: Request, conversation_id: str):
         raise HTTPException(status_code=500, detail="Internal Server Error!")
     
 @app.websocket("/live_updates")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, background_tasks: BackgroundTasks):
     # Accept the connection
     await websocket.accept()
 
@@ -451,7 +489,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         for socket in notification_sockets:
                             if socket['User'] == friend["Username"]:
                                 # If the friend is online, send them the message
-                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}))
+                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}))      
                 else:
                     await websocket.send_text(json.dumps({"Status": "Failed", "Reason": "INVALID_TOKEN"}))
                     await websocket.close()
@@ -475,6 +513,18 @@ async def websocket_endpoint(websocket: WebSocket):
                             if user["User"] in members:
                                 await user["Socket"].send_text(json.dumps({"Type": "MESSAGE_UPDATE", "Id": data["ConversationId"], "Message": {"Author": username, "Message": data["Message"]}}))
                                 print("sent notification to: " + user["User"])
+                        
+                        # If user is offline then a push notification will be sent to their devices
+                        for member in members:
+                            print(member)
+                            if member != username:
+                                exists = any(socket['User'] == member for socket in notification_sockets)
+
+                                print(exists)
+
+                                if not exists:
+                                    print("sending push notification to: " + member)
+                                    background_tasks.add_task(send_push_notification, username, data['Message'], {"conversation_id": data['ConversationId']}, member)
                     else:
                         await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 else:
