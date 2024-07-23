@@ -354,6 +354,26 @@ async def add_mobile_notifications_device(push_token: str, account: str):
         """, (push_token, account,))
         conn.commit()
 
+async def remove_mobile_notifications_device(push_token: str):
+    """
+    ## Remove Mobile Notifications Device
+    Unregister a mobile device for Expos push notifications API.
+
+    ### Parameters
+    - push_token: The unique identifier needed to send a notification to the device.
+
+    - account: The account the device is registered to.
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM push_notifications WHERE push_token = %s", (push_token,))
+    conn.commit()
+
 async def get_mobile_push_token(account: str):
     """
     ## Get Mobile Push Token
