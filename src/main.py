@@ -8,6 +8,7 @@ import os
 import yaml
 from __version__ import version
 import requests
+import asyncio
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -60,9 +61,6 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
     # Get push tokens from database
     push_tokens = await database.get_mobile_push_token(account)
 
-    print("Push Tokens For " + account + ":")
-    print(push_tokens)
-
     # Check if database returned any tokens
     if len(push_tokens) > 0:
         # Create messages to send to clients
@@ -78,8 +76,6 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
         
         # Send notifications to devices
         requests.post("https://exp.host/--/api/v2/push/send", json=messages)
-
-        print("sent push notification to: " + account)
 
 @app.get('/')
 async def home():
@@ -460,7 +456,7 @@ async def remove_conversation_v2(request: Request, conversation_id: str):
         raise HTTPException(status_code=500, detail="Internal Server Error!")
     
 @app.websocket("/live_updates")
-async def websocket_endpoint(websocket: WebSocket, background_tasks: BackgroundTasks):
+async def websocket_endpoint(websocket: WebSocket):
     # Accept the connection
     await websocket.accept()
 
@@ -520,11 +516,8 @@ async def websocket_endpoint(websocket: WebSocket, background_tasks: BackgroundT
                             if member != username:
                                 exists = any(socket['User'] == member for socket in notification_sockets)
 
-                                print(exists)
-
                                 if not exists:
-                                    print("sending push notification to: " + member)
-                                    background_tasks.add_task(send_push_notification, username, data['Message'], {"conversation_id": data['ConversationId']}, member)
+                                    asyncio.ensure_future(send_push_notification(username, data['Message'], {"conversation_id": data['ConversationId']}, member))
                     else:
                         await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 else:
