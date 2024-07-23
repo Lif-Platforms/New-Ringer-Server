@@ -72,10 +72,11 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
                 'title': title,
                 'body': body,
                 'data': data,
+                'sound': 'default'
             })
         
         # Send notifications to devices
-        requests.post("https://exp.host/--/api/v2/push/send", json=messages)
+        requests.post("https://exp.host/--/api/v2/push/send", json=messages, timeout=10)
 
 @app.get('/')
 async def home():
@@ -485,7 +486,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         for socket in notification_sockets:
                             if socket['User'] == friend["Username"]:
                                 # If the friend is online, send them the message
-                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}))      
+                                await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}))
                 else:
                     await websocket.send_text(json.dumps({"Status": "Failed", "Reason": "INVALID_TOKEN"}))
                     await websocket.close()
@@ -517,7 +518,11 @@ async def websocket_endpoint(websocket: WebSocket):
                                 exists = any(socket['User'] == member for socket in notification_sockets)
 
                                 if not exists:
-                                    asyncio.ensure_future(send_push_notification(username, data['Message'], {"conversation_id": data['ConversationId']}, member))
+                                    asyncio.ensure_future(send_push_notification(
+                                        username, data['Message'], 
+                                        {"conversation_id": data['ConversationId']}, 
+                                        member
+                                    ))
                     else:
                         await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 else:
