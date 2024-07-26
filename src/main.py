@@ -241,9 +241,9 @@ async def accept_friend_request_v2(request: Request, background_tasks: Backgroun
         conversation_id = await database.accept_friend(account=username, friend=user)
 
         # Notify sender request was accepted (if online)
-        for user in notification_sockets:
-            if user['User'] == user:
-                await user['Socket'].send_text(json.dumps({"Type": "FRIEND_REQUEST_ACCEPT", "User": username, "Id": conversation_id}))
+        for notify_user in notification_sockets:
+            if notify_user['User'] == user:
+                await notify_user['Socket'].send_text(json.dumps({"Type": "FRIEND_REQUEST_ACCEPT", "User": username, "Id": conversation_id}))
                 break
 
         exists = any(socket['User'] == user for socket in notification_sockets)
