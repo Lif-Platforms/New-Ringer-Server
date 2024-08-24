@@ -9,6 +9,7 @@ import yaml
 from __version__ import version
 import requests
 import asyncio
+from pysafebrowsing import SafeBrowsing
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -586,6 +587,28 @@ async def unregister_push_notifications(request: Request, device_type: str):
             raise HTTPException(status_code=400, detail="Invalid device type. Supported types: 'mobile'.")
     else:
         raise HTTPException(status_code=401, detail="Invalid Token")
+    
+@app.post("/link_safety_check")
+async def link_safety_check(request: Request):
+    # Load API key from config
+    api_key = configurations['safe-browsing-api-key']
+
+    # Initialize the SafeBrowsing client
+    safe_browsing = SafeBrowsing(api_key)
+
+    # Get JSON body
+    body = await request.json()
+
+    # Get URL from body
+    check_url = body['url']
+
+    # Lookup the URL
+    result = safe_browsing.lookup_urls([check_url])
+
+    if result[check_url]['malicious']:
+        return {"safe": False}
+    else:
+        return {"safe": True}
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)
