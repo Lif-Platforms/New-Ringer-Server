@@ -528,14 +528,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 
                 elif data["MessageType"] == "USER_TYPING":
-                   # Get conversation members
-                   members = await database.get_members(data['ConversationId'])
+                    # Get conversation members
+                    members = await database.get_members(data['ConversationId'])
 
-                   # Notify users of the change
-                   for user in notification_sockets:
+                    # Notify users of the change
+                    for user in notification_sockets:
                         if user["User"] in members:
-                            await user["Socket"].send_text(json.dumps({"Type": "USER_TYPING", "Id": data["ConversationId"], "User": username, "Typing": data['Typing']}))
-                            print("sent update to: " + user["User"])
+                            await user["Socket"].send_text(json.dumps({
+                                "Type": "USER_TYPING", 
+                                "Id": data["ConversationId"], 
+                                "User": username, 
+                                "Typing": data['Typing']
+                            }))
                 else:
                     await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
 
