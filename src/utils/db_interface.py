@@ -12,6 +12,11 @@ def set_config(config):
 # Global database connection
 conn = None
 
+# Define database errors
+class ConversationNotFound(Exception):
+    """Error for when the conversation supplied could not be found in the database."""
+    pass
+
 # Function to establish a database connection
 async def connect_to_database():
     # Handle connecting to the database
@@ -262,7 +267,9 @@ async def get_members(conversation_id: str):
     if conversation:
         members = json.loads(conversation[2])
 
-    return members
+        return members
+    else:
+        raise ConversationNotFound()
 
 async def remove_conversation(conversation_id: str, username: str):
     await connect_to_database()

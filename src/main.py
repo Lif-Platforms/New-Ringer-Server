@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Requ
 from fastapi.middleware.cors import CORSMiddleware
 import utils.auth_server_interface as auth_server
 import utils.db_interface as database
+from utils.db_interface import ConversationNotFound
 import json
 import uvicorn
 import os
@@ -366,20 +367,31 @@ async def load_messages_v2(request: Request, conversation_id: str):
 
     if status == "GOOD!":
         try:
-            # Get all messages from database
-            messages = await database.get_messages(conversation_id)
-
-            # Remove all but the last 20 messages
-            if len(messages) > 20:
-                messages = messages[-20:]
-
-            return messages
-        except:
+            # Get all members of conversation
+            members = await database.get_members(conversation_id)
+        except ConversationNotFound:
             raise HTTPException(status_code=404, detail="Conversation Not Found")
+        except:
+            raise HTTPException(status_code=500, detail="Internal Server Error")
         
+        # Check to ensure that the user is a member of the conversation they are trying to load
+        if username in members:
+            try:
+                # Get all messages from database
+                messages = await database.get_messages(conversation_id)
+
+                # Remove all but the last 20 messages
+                if len(messages) > 20:
+                    messages = messages[-20:]
+
+                return messages
+            except:
+                raise HTTPException(status_code=500, detail="Internal Server Error")
+        else:
+            raise HTTPException(status_code=403, detail="You are not a member of this conversation")
+                        
     elif status == "INVALID_TOKEN":
         raise HTTPException(status_code=401, detail="Invalid Token")
-    
     else:
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
