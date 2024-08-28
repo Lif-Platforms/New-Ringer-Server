@@ -336,26 +336,6 @@ async def send_message(request: Request):
     else:
         return {"Status": "Unsuccessful"}
     
-@app.get('/load_messages/{username}/{token}/{conversation}')
-async def load_messages(username, token, conversation):
-    # Verify token 
-    status = await auth_server.verify_token(username, token)
-
-    if status == 'GOOD!':
-        try:
-            messages = await database.get_messages(conversation)
-
-            # Remove all but the last 20 messages
-            if len(messages) > 20:
-                messages = messages[-20:]
-
-            return messages
-        except:
-            raise HTTPException(status_code=404, detail="Conversation Not Found")
-    
-    else:
-        return {'status': "Unsuccessful"}
-    
 @app.get("/load_messages/{conversation_id}")
 async def load_messages_v2(request: Request, conversation_id: str):
     # Get username and toke from headers
