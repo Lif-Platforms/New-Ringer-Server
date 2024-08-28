@@ -342,6 +342,9 @@ async def load_messages_v2(request: Request, conversation_id: str):
     username = request.headers.get("username")
     token = request.headers.get("token")
 
+    # Get api route version from headers
+    route_version = request.headers.get("version")
+
     # Verifies token with auth server
     status = await auth_server.verify_token(username, token)
 
@@ -364,7 +367,24 @@ async def load_messages_v2(request: Request, conversation_id: str):
                 if len(messages) > 20:
                     messages = messages[-20:]
 
-                return messages
+                # Set conversation name based on who is loading it
+                if members[0] == username:
+                    conversation_name = members[1]
+                else:
+                    conversation_name = members[0]
+
+                # Format data for client
+                data = {
+                    "conversation_name": conversation_name,
+                    "conversation_id": conversation_id,
+                    "messages": messages
+                }
+
+                # Check what route version the client requested
+                if route_version == "2.0":
+                    return data
+                else:
+                    return messages
             except:
                 raise HTTPException(status_code=500, detail="Internal Server Error")
         else:
