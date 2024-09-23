@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import utils.auth_server_interface as auth_server
 import utils.db_interface as database
 from utils.db_interface import ConversationNotFound
+from urllib.parse import quote
 import json
 import uvicorn
 import os
@@ -556,7 +557,16 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Add message to database
                         try:
-                            message_id = await database.send_message(username, data["ConversationId"], data["Message"], self_destruct)
+                            # See if user is sending a GIF message
+                            gif_url = None
+                            message_type = None
+
+                            if data.get('Message_Type') is not None:
+                                if data['Message_Type'] == "GIF":
+                                    message_type = "GIF"
+                                    gif_url = data['GIF_URL']
+
+                            message_id = await database.send_message(username, data["ConversationId"], data["Message"], self_destruct, message_type, gif_url)
                         except ConversationNotFound:
                             await websocket.send_text(json.dumps({
                                 "ResponseType": "ERROR",
@@ -584,7 +594,9 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "Author": username,
                                         "Message": data["Message"],
                                         "Id": message_id,
-                                        "Self_Destruct": self_destruct
+                                        "Self_Destruct": self_destruct,
+                                        "Message_Type": message_type,
+                                        "GIF_URL": gif_url
                                     }
                                 }))
                         
@@ -724,6 +736,16 @@ async def link_safety_check(request: Request):
         return {"safe": False}
     else:
         return {"safe": True}
+    
+@app.get("/search_gifs")
+async def search_gifs(search: str = None):
+    if search:
+        sanitized_search = quote(search)
+        url = f"https://api.giphy.com/v1/gifs/search?api_key={configurations['giphy-api-key']}&q={sanitized_search}&limit=20"
+        response = requests.get(url, timeout=20)
+        return response.json()
+    else:
+        raise HTTPException(status_code=400, detail="No search query provided.")
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)

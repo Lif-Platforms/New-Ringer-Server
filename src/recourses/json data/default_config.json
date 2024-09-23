@@ -7,5 +7,6 @@
     "mysql-ssl": false,
     "mysql-cert-path": "INSERT PATH HERE",
     "auth-server-url": "INSERT URL HERE",
-    "safe-browsing-api-key": "INSERT API KEY HERE"
+    "safe-browsing-api-key": "INSERT API KEY HERE",
+    "giphy-api-key": "INSERT API KEY HERE"
 }
