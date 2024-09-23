@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import utils.auth_server_interface as auth_server
 import utils.db_interface as database
 from utils.db_interface import ConversationNotFound
+from urllib.parse import quote
 import json
 import uvicorn
 import os
@@ -739,8 +740,9 @@ async def link_safety_check(request: Request):
 @app.get("/search_gifs")
 async def search_gifs(search: str = None):
     if search:
-        url = f"https://api.giphy.com/v1/gifs/search?api_key={configurations['giphy-api-key']}&q={search}&limit=20"
-        response = requests.get(url)
+        sanitized_search = quote(search)
+        url = f"https://api.giphy.com/v1/gifs/search?api_key={configurations['giphy-api-key']}&q={sanitized_search}&limit=20"
+        response = requests.get(url, timeout=20)
         return response.json()
     else:
         raise HTTPException(status_code=400, detail="No search query provided.")

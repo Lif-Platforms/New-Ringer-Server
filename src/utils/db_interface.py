@@ -261,7 +261,14 @@ async def get_messages(conversation_id: str):
             else:
                 self_destruct = False
 
-            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3], "Self_Destruct": self_destruct, "Message_Type": message[8], "GIF_URL": message[9]})
+            messages.append({
+                "Author": message[1],
+                "Message": message[2],
+                "Message_Id": message[3],
+                "Self_Destruct": self_destruct,
+                "Message_Type": message[8],
+                "GIF_URL": message[9]
+            })
 
         return messages
     else:
