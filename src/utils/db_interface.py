@@ -216,7 +216,11 @@ async def send_message(author, conversation_id, message, self_destruct):
         message_id = str(uuid.uuid4())
 
         # Insert message into database
-        cursor.execute("INSERT INTO messages (author, content, message_id, conversation_id, self_destruct) VALUES (%s, %s, %s, %s, %s)", (author, message, message_id, conversation_id, self_destruct))
+        cursor.execute("""
+            INSERT INTO messages (author, content, message_id, conversation_id, self_destruct) 
+            VALUES (%s, %s, %s, %s, %s)""", 
+            (author, message, message_id, conversation_id, self_destruct)
+        )
         conn.commit()
 
         return message_id

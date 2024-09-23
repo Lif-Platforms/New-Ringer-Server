@@ -577,7 +577,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Notify conversation members that the message was sent
                         for user in notification_sockets:
                             if user["User"] in members:
-                                await user["Socket"].send_text(json.dumps({"Type": "MESSAGE_UPDATE", "Id": data["ConversationId"], "Message": {"Author": username, "Message": data["Message"], "Id": message_id, "Self_Destruct": self_destruct}}))
+                                await user["Socket"].send_text(json.dumps({
+                                    "Type": "MESSAGE_UPDATE",
+                                    "Id": data["ConversationId"],
+                                    "Message": {
+                                        "Author": username,
+                                        "Message": data["Message"],
+                                        "Id": message_id,
+                                        "Self_Destruct": self_destruct
+                                    }
+                                }))
                         
                         # If user is offline then a push notification will be sent to their devices
                         for member in members:
