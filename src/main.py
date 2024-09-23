@@ -12,7 +12,6 @@ import requests
 import asyncio
 from pysafebrowsing import SafeBrowsing
 from contextlib import asynccontextmanager
-import time
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -61,7 +60,11 @@ async def destruct_messages():
             for member in members:
                 for user in notification_sockets:
                     if user['User'] == member:
-                        await user['Socket'].send_text(json.dumps({"Type": "DELETE_MESSAGE", "Conversation_Id": message['conversation_id'], "Message_Id": message['message_id']}))
+                        await user['Socket'].send_text(json.dumps({
+                            "Type": "DELETE_MESSAGE",
+                            "Conversation_Id": message['conversation_id'],
+                            "Message_Id": message['message_id']
+                        }))
 
         await database.destruct_messages()
 
@@ -555,10 +558,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         try:
                             message_id = await database.send_message(username, data["ConversationId"], data["Message"], self_destruct)
                         except ConversationNotFound:
-                            await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NOT_FOUND", "Detail": "Provided conversation was not found."}))
+                            await websocket.send_text(json.dumps({
+                                "ResponseType": "ERROR",
+                                "ErrorCode": "NOT_FOUND",
+                                "Detail": "Provided conversation was not found."
+                            }))
                             continue
                         except Exception:
-                            await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "SERVER_ERROR", "Detail": "Internal Server Error"}))
+                            await websocket.send_text(json.dumps({
+                                "ResponseType": "ERROR",
+                                "ErrorCode": "SERVER_ERROR",
+                                "Detail": "Internal Server Error"
+                            }))
 
                         # Tell client message was sent
                         await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT", "Message_Id": message_id}))
@@ -612,7 +623,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
                                 await websocket.send_text(json.dumps({"ResponseType": "OK"}))
                             else:
-                                await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION", "Detail": "You cannot view your own message."}))
+                                await websocket.send_text(json.dumps({
+                                    "ResponseType": "ERROR",
+                                    "ErrorCode": "NO_PERMISSION",
+                                    "Detail": "You cannot view your own message."
+                                }))
                         else:
                             await websocket.send_text(json.dumps({'ResponseType': "ERROR", "ErrorCode": "NOT_FOUND"}))
                     else:

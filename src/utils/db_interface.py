@@ -572,7 +572,7 @@ async def view_message(message_id: str):
     cursor.execute("SELECT self_destruct FROM messages WHERE message_id = %s", (message_id,))
     message = cursor.fetchone()
 
-    if message != None and message[0] != "False" and message[0] != None:
+    if message and message[0] != "False" and message[0]:
         cursor.execute("""
             UPDATE messages
             SET delete_time = DATE_ADD(UTC_TIMESTAMP(), INTERVAL self_destruct MINUTE)
