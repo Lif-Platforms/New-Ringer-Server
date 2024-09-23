@@ -201,7 +201,7 @@ async def deny_friend(username, deny_user):
     cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(friend_requests), username))
     conn.commit()
 
-async def send_message(author, conversation_id, message, self_destruct):
+async def send_message(author, conversation_id, message, self_destruct, message_type = None, gif_url = None):
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -217,9 +217,9 @@ async def send_message(author, conversation_id, message, self_destruct):
 
         # Insert message into database
         cursor.execute("""
-            INSERT INTO messages (author, content, message_id, conversation_id, self_destruct) 
-            VALUES (%s, %s, %s, %s, %s)""", 
-            (author, message, message_id, conversation_id, self_destruct)
+            INSERT INTO messages (author, content, message_id, conversation_id, self_destruct, message_type, GIF_URL) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s)""", 
+            (author, message, message_id, conversation_id, self_destruct, message_type, gif_url)
         )
         conn.commit()
 
@@ -261,7 +261,7 @@ async def get_messages(conversation_id: str):
             else:
                 self_destruct = False
 
-            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3], "Self_Destruct": self_destruct})
+            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3], "Self_Destruct": self_destruct, "Message_Type": message[8], "GIF_URL": message[9]})
 
         return messages
     else:
