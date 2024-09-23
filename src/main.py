@@ -11,6 +11,8 @@ from __version__ import version
 import requests
 import asyncio
 from pysafebrowsing import SafeBrowsing
+from contextlib import asynccontextmanager
+import time
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
@@ -47,10 +49,37 @@ with open("config.yml", "w") as config:
 auth_server.set_config(configurations)
 database.set_config(configurations)
 
+async def destruct_messages():
+    while True:
+        # Get delete messages
+        messages = await database.get_delete_messages()
+        
+        # Notify clients to delete the message
+        for message in messages:
+            members = await database.get_members(message['conversation_id'])
+
+            for member in members:
+                for user in notification_sockets:
+                    if user['User'] == member:
+                        await user['Socket'].send_text(json.dumps({"Type": "DELETE_MESSAGE", "Conversation_Id": message['conversation_id'], "Message_Id": message['message_id']}))
+
+        await database.destruct_messages()
+
+        await asyncio.sleep(10)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Code to run at startup
+    task = asyncio.create_task(destruct_messages())
+    yield
+    # Code to run at shutdown
+    task.cancel()
+
 app = FastAPI(
     title="Ringer Server",
     description="Official server for the Ringer messaging app.",
-    version=version
+    version=version,
+    lifespan=lifespan
 )
 
 # Allow Cross-Origin Resource Sharing (CORS) for all origins
@@ -380,12 +409,16 @@ async def load_messages_v2(request: Request, conversation_id: str):
                     "messages": messages
                 }
 
+                # Mark messages as viewed
+                await database.mark_message_viewed_bulk(conversation_name, conversation_id)
+
                 # Check what route version the client requested
                 if route_version == "2.0":
                     return data
                 else:
                     return messages
-            except:
+            except Exception as e:
+                print(e)
                 raise HTTPException(status_code=500, detail="Internal Server Error")
         else:
             raise HTTPException(status_code=403, detail="You are not a member of this conversation")
@@ -512,17 +545,28 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     # Check if user is a member of the conversation
                     if username in members:
+                        # Check if message is self-destructing
+                        self_destruct = "False"
+
+                        if data.get('Self-Destruct') is not None:
+                            self_destruct = data['Self-Destruct']
+
                         # Add message to database
-                        await database.send_message(username, data["ConversationId"], data["Message"])
+                        try:
+                            message_id = await database.send_message(username, data["ConversationId"], data["Message"], self_destruct)
+                        except ConversationNotFound:
+                            await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NOT_FOUND", "Detail": "Provided conversation was not found."}))
+                            continue
+                        except Exception:
+                            await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "SERVER_ERROR", "Detail": "Internal Server Error"}))
 
                         # Tell client message was sent
-                        await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT"}))
+                        await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT", "Message_Id": message_id}))
 
                         # Notify conversation members that the message was sent
                         for user in notification_sockets:
                             if user["User"] in members:
-                                await user["Socket"].send_text(json.dumps({"Type": "MESSAGE_UPDATE", "Id": data["ConversationId"], "Message": {"Author": username, "Message": data["Message"]}}))
-                                print("sent notification to: " + user["User"])
+                                await user["Socket"].send_text(json.dumps({"Type": "MESSAGE_UPDATE", "Id": data["ConversationId"], "Message": {"Author": username, "Message": data["Message"], "Id": message_id, "Self_Destruct": self_destruct}}))
                         
                         # If user is offline then a push notification will be sent to their devices
                         for member in members:
@@ -552,6 +596,27 @@ async def websocket_endpoint(websocket: WebSocket):
                                 "User": username, 
                                 "Typing": data['Typing']
                             }))
+                elif data["MessageType"] == "VIEW_MESSAGE":
+                    conversation_id = data['Conversation_Id']
+
+                    # Get conversation members
+                    members = await database.get_members(conversation_id)
+
+                    if username in members:
+                        # Get message from database and check to ensure the viewer is not the author
+                        message = await database.get_message(data['Message_Id'])
+
+                        if message:
+                            if message['author'] != username:
+                                await database.view_message(data['Message_Id'])
+
+                                await websocket.send_text(json.dumps({"ResponseType": "OK"}))
+                            else:
+                                await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION", "Detail": "You cannot view your own message."}))
+                        else:
+                            await websocket.send_text(json.dumps({'ResponseType': "ERROR", "ErrorCode": "NOT_FOUND"}))
+                    else:
+                        await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 else:
                     await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
 

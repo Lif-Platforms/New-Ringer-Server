@@ -1,4 +1,3 @@
-import sqlite3
 import mysql.connector
 from mysql.connector.constants import ClientFlag
 import json
@@ -202,7 +201,7 @@ async def deny_friend(username, deny_user):
     cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(friend_requests), username))
     conn.commit()
 
-async def send_message(author, conversation_id, message):
+async def send_message(author, conversation_id, message, self_destruct):
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -217,9 +216,13 @@ async def send_message(author, conversation_id, message):
         message_id = str(uuid.uuid4())
 
         # Insert message into database
-        cursor.execute("INSERT INTO messages (author, content, message_id, conversation_id) VALUES (%s, %s, %s, %s)", (author, message, message_id, conversation_id))
+        cursor.execute("INSERT INTO messages (author, content, message_id, conversation_id, self_destruct) VALUES (%s, %s, %s, %s, %s)", (author, message, message_id, conversation_id, self_destruct))
         conn.commit()
-            
+
+        return message_id
+    else:
+        raise ConversationNotFound()
+    
 async def get_messages(conversation_id: str):
     await connect_to_database()
 
@@ -248,7 +251,13 @@ async def get_messages(conversation_id: str):
 
         # Format messages
         for message in database_messages:
-            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3]})
+            # Format self destruct for messages
+            if bool(message[5]) is not False:
+                self_destruct = message[5]
+            else:
+                self_destruct = False
+
+            messages.append({"Author": message[1], "Message": message[2], "Message_Id": message[3], "Self_Destruct": self_destruct})
 
         return messages
     else:
@@ -407,3 +416,166 @@ async def get_mobile_push_token(account: str):
         format_tokens.append(token[0])
 
     return format_tokens
+
+async def mark_message_viewed_bulk(user: str, conversation_id: str):
+    """
+    ## Mark Message Viewed Bulk
+    Mark the last 20 messages sent by a user as viewed.
+
+    ### Parameters
+    - user: The user that sent the messages.
+    - conversation_id: The conversation thats being viewed.
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    # Mark messages as viewed
+    cursor.execute("""
+    UPDATE messages 
+    SET viewed = 1 
+    WHERE id IN (
+        SELECT id 
+        FROM (
+            SELECT id 
+            FROM messages 
+            WHERE conversation_id = %s 
+            ORDER BY id DESC 
+            LIMIT 20
+        ) AS recent_entries
+    ) AND author = %s;
+    """, (conversation_id, user))
+
+    # Mark messages for deletion
+    cursor.execute("""
+        UPDATE messages 
+        SET delete_time = DATE_ADD(UTC_TIMESTAMP(), INTERVAL self_destruct MINUTE) 
+        WHERE conversation_id = %s 
+        AND viewed = 1 
+        AND author = %s 
+        AND self_destruct IS NOT NULL 
+        AND self_destruct != 'False';
+    """, (conversation_id, user))
+    conn.commit()
+
+async def get_delete_messages():
+    """
+    ## Get Delete Messages
+    Get messages that are due to be deleted.
+
+    ### Parameters
+    None
+
+    ### Returns
+    - list: list of messages that should be deleted.
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT conversation_id, message_id 
+        FROM messages 
+        WHERE delete_time <= UTC_TIMESTAMP()
+        AND self_destruct IS NOT NULL
+        AND self_destruct != 'False'
+        AND viewed = 1
+        AND viewed IS NOT NULL;
+    """)
+    messages = cursor.fetchall()
+
+    data = []
+
+    for message in messages:
+        data.append({"conversation_id": message[0], "message_id": message[1]})
+
+    return data
+
+async def destruct_messages():
+    """
+    ## Destruct Messages
+    Deletes all messages that are ready to be self-destructed.
+
+    ### Parameters
+    None
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM messages
+        WHERE delete_time <= UTC_TIMESTAMP()
+        AND self_destruct IS NOT NULL
+        AND self_destruct != 'False'
+        AND viewed = 1
+        AND viewed IS NOT NULL;
+    """)
+    conn.commit()
+
+async def get_message(message_id: str):
+    """
+    ## Get Message
+    Get a message from the database based on its id.
+
+    ### Parameters
+    message_id: the id for the message.
+
+    ### Returns
+    - dict: message from the database.
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    cursor.execute("SElECT * FROM messages WHERE message_id = %s", (message_id,))
+    message = cursor.fetchone()
+
+    if message:
+        return {
+            'author': message[1],
+            'content': message[2],
+            'message_id': message[3],
+            'conversation_id': message[4],
+            'self_destruct': message[5],
+            'viewed': message[6],
+            'delete_time': message[7]
+        }
+    else:
+        return None
+    
+async def view_message(message_id: str):
+    """
+    ## View Message
+    Marks a message in a conversation as viewed.
+
+    ### Parameters
+    message_id: the id for the message.
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    cursor.execute("UPDATE messages SET viewed = 1 WHERE message_id = %s", (message_id,))
+    conn.commit()
+
+    # Check if messages needs to be self-destructed
+    cursor.execute("SELECT self_destruct FROM messages WHERE message_id = %s", (message_id,))
+    message = cursor.fetchone()
+
+    if message != None and message[0] != "False" and message[0] != None:
+        cursor.execute("""
+            UPDATE messages
+            SET delete_time = DATE_ADD(UTC_TIMESTAMP(), INTERVAL self_destruct MINUTE)
+            WHERE message_id = %s
+        """, (message_id,))
+        conn.commit()
