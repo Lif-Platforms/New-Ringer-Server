@@ -590,3 +590,36 @@ async def view_message(message_id: str):
             WHERE message_id = %s
         """, (message_id,))
         conn.commit()
+
+async def fetch_last_messages(conversation_ids: list):
+    """
+    ## Fetch Last Messages
+    Fetches the most recent message for each conversation id.
+
+    ### Parameters
+    conversation_id: list of conversation ids to fetch messages from.
+
+    ### Returns
+    list: list of messages.
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    messages = []
+
+    for conversation in conversation_ids:
+        cursor.execute("""
+            SELECT author, content FROM messages 
+            WHERE conversation_id = %s 
+            ORDER BY id 
+            DESC LIMIT 1""", 
+        (conversation,))
+        message = cursor.fetchone()
+
+        if message:
+            messages.append({"id": conversation, "message": f"{message[0]} - {message[1]}"})
+        else:
+            messages.append({"id": conversation, "message": "This is a new conversation!"})
+
+    return messages
