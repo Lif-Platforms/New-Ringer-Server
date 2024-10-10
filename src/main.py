@@ -156,6 +156,21 @@ async def get_friends_v2(request: Request):
             else:
                 friend["Online"] = False
 
+        conversation_ids = []
+                
+        # Create a list of conversation ids
+        for friend in friends_list:
+            conversation_ids.append(friend['Id'])
+
+        # Get last message sent in each conversation
+        last_messages = await database.fetch_last_messages(conversation_ids)
+
+        # Add messages to friends list
+        for message in last_messages:
+            for friend in friends_list:
+                if friend["Id"] == message['id']:
+                    friend["Last_Message"] = message['message']
+
         return friends_list
     
     elif status == "INVALID_TOKEN":
