@@ -227,7 +227,7 @@ async def send_message(author, conversation_id, message, self_destruct, message_
     else:
         raise ConversationNotFound()
     
-async def get_messages(conversation_id: str):
+async def get_messages(conversation_id: str, offset: int):
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -242,15 +242,12 @@ async def get_messages(conversation_id: str):
     # Check if conversation exists
     if conversation:
         # Get all messages
-        cursor.execute("""SELECT * FROM (
-                            SELECT *
-                            FROM messages
-                            WHERE conversation_id = %s
-                            ORDER BY id DESC
-                            LIMIT 20
-                        ) AS anyVariableName
-                        ORDER BY anyVariableName.id ASC;
-                       """, (conversation_id,))
+        cursor.execute("""
+            SELECT * FROM messages
+            WHERE conversation_id = %s
+            ORDER BY id DESC
+            LIMIT 20 OFFSET %s
+        """, (conversation_id, offset))
         database_messages = cursor.fetchall()
 
         # Format messages
@@ -428,7 +425,7 @@ async def get_mobile_push_token(account: str):
 
     return format_tokens
 
-async def mark_message_viewed_bulk(user: str, conversation_id: str):
+async def mark_message_viewed_bulk(user: str, conversation_id: str, offset: int):
     """
     ## Mark Message Viewed Bulk
     Mark the last 20 messages sent by a user as viewed.
@@ -436,6 +433,7 @@ async def mark_message_viewed_bulk(user: str, conversation_id: str):
     ### Parameters
     - user: The user that sent the messages.
     - conversation_id: The conversation thats being viewed.
+    - offset: The offset in the database
 
     ### Returns
     None
@@ -455,10 +453,10 @@ async def mark_message_viewed_bulk(user: str, conversation_id: str):
             FROM messages 
             WHERE conversation_id = %s 
             ORDER BY id DESC 
-            LIMIT 20
+            LIMIT 20 OFFSET %s
         ) AS recent_entries
     ) AND author = %s;
-    """, (conversation_id, user))
+    """, (conversation_id, offset, user))
 
     # Mark messages for deletion
     cursor.execute("""

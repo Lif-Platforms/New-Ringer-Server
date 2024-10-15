@@ -385,7 +385,7 @@ async def send_message(request: Request):
         return {"Status": "Unsuccessful"}
     
 @app.get("/load_messages/{conversation_id}")
-async def load_messages_v2(request: Request, conversation_id: str):
+async def load_messages_v2(request: Request, conversation_id: str, offset: int = 0):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -409,11 +409,8 @@ async def load_messages_v2(request: Request, conversation_id: str):
         if username in members:
             try:
                 # Get all messages from database
-                messages = await database.get_messages(conversation_id)
-
-                # Remove all but the last 20 messages
-                if len(messages) > 20:
-                    messages = messages[-20:]
+                messages = await database.get_messages(conversation_id, offset)
+                messages.reverse()
 
                 # Set conversation name based on who is loading it
                 if members[0] == username:
@@ -429,7 +426,7 @@ async def load_messages_v2(request: Request, conversation_id: str):
                 }
 
                 # Mark messages as viewed
-                await database.mark_message_viewed_bulk(conversation_name, conversation_id)
+                await database.mark_message_viewed_bulk(conversation_name, conversation_id, offset)
 
                 # Check what route version the client requested
                 if route_version == "2.0":
