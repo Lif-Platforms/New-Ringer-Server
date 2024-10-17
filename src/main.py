@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
-# Get run environment 
+# Get run environment
 __env__= os.getenv('RUN_ENVIRONMENT')
 
 # Determine whether or not to show the documentation
