@@ -621,3 +621,27 @@ async def fetch_last_messages(conversation_ids: list):
             messages.append({"id": conversation, "message": "This is a new conversation!"})
 
     return messages
+
+async def search_users(user: str):
+    """
+    ## Search Users
+    Searches the database for users.
+
+    ### Parameters
+    user: user that is being searched.
+
+    ### Returns
+    list: list of users.
+    """
+    await connect_to_database()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT account FROM users WHERE account SOUNDS LIKE %s", (user,))
+    database_users = cursor.fetchall()
+
+    return_users = []
+
+    for user_ in database_users:
+        return_users.append(user_[0])
+
+    return return_users

@@ -769,6 +769,32 @@ async def search_gifs(search: str = None):
         return response.json()
     else:
         raise HTTPException(status_code=400, detail="No search query provided.")
+    
+@app.websocket("/user_search")
+async def user_search(websocket: WebSocket):
+    # Accept user connection
+    await websocket.accept()
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if "user" in data:
+                results = await database.search_users(data['user'])
+
+                await websocket.send_json(results)
+            else:
+                await websocket.send_json({
+                    "responseType": "ERROR",
+                    "errorCode": "BAD_REQUEST",
+                    "detail": "Data must contain a 'user' key."
+                })
+    except WebSocketDisconnect:
+        print("Client disconnected")
+    finally:
+        if websocket.client_state.name == "CONNECTED":
+            await websocket.close()
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)
