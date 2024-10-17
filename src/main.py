@@ -115,7 +115,7 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
 
 @app.get('/')
 async def home():
-    return 'Welcome to the Ringer API!'
+    return {"name": "Ringer Server", "version": version}
 
 @app.get('/get_friends_list/{username}/{token}')
 async def get_friends(username: str, token: str):
