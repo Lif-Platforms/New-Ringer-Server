@@ -16,6 +16,15 @@ from contextlib import asynccontextmanager
 
 resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
 
+# Get run environment 
+__env__= os.getenv('RUN_ENVIRONMENT')
+
+# Determine whether or not to show the documentation
+if __env__ == "PRODUCTION":
+    docs_url = None
+else:
+    docs_url = '/docs'
+
 if not os.path.isfile("config.yml"):
     with open("config.yml", 'x') as config:
         config.close()
@@ -83,7 +92,9 @@ app = FastAPI(
     title="Ringer Server",
     description="Official server for the Ringer messaging app.",
     version=version,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=None
 )
 
 # Allow Cross-Origin Resource Sharing (CORS) for all origins
