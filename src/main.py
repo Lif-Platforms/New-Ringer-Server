@@ -103,6 +103,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # List users currently connected to the notification service
 notification_sockets = []
 
+# List of users connected to the push-notifications service
+push_notification_sockets = []
+
 async def send_push_notification(title: str, body: str, data: dict, account: str):
     # Get push tokens from database
     push_tokens = await database.get_mobile_push_token(account)
@@ -635,6 +638,18 @@ async def websocket_endpoint(websocket: WebSocket):
                                         {"conversation_id": data['ConversationId']},
                                         member
                                     ))
+
+                                    # If user is connected to notifications websocket service
+                                    # a notification will be delivered that way
+                                    for user in push_notification_sockets:
+                                        if user['user'] == member:
+                                            await user['socket'].send_json({
+                                                "responseType": "notification",
+                                                "title": username,
+                                                "body": data['Message'],
+                                                "conversation_id": data['ConversationId']
+                                            })
+
                     else:
                         await websocket.send_text(json.dumps({"ResponseType": "ERROR", "ErrorCode": "NO_PERMISSION"}))
                 
@@ -795,6 +810,50 @@ async def user_search(websocket: WebSocket):
         if websocket.client_state.name == "CONNECTED":
             await websocket.close()
 
+@app.websocket("/live_notifications")
+async def live_notifications(websocket: WebSocket):
+    await websocket.accept()
 
+    authenticated = False
+    user_socket = None
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if not authenticated and "credentials" in data:
+                credentials = data['credentials']
+                # Check request to ensure its good
+                if "username" in credentials and "token" in credentials:
+                    # Verify credentials with auth server
+                    auth_status = await auth_server.verify_token(credentials['username'], credentials['token'])
+
+                    if auth_status == "GOOD!":
+                        await websocket.send_json({"responseType": "authSuccess", "detail": "Authentication was successful"})
+
+                        user_socket = {"user": credentials['username'], "socket": websocket}
+
+                        # Add user to push notifications sockets
+                        push_notification_sockets.append(user_socket)
+                    else:
+                        await websocket.send_json({"responseType": "ERROR", "errorCode": "INVALID_CREDENTIALS"})
+            elif authenticated and "credentials" not in data:
+                await websocket.send_json({"responseType": "ERROR", "errorCode": "BAD_REQUEST"})
+            else:
+                await websocket.send_json({"responseType": "ERROR", "errorCode": "NOT_AUTHENTICATED"})
+    except WebSocketDisconnect:
+        print("Client disconnected")
+
+        # Remove user from notification sockets
+        if user_socket in push_notification_sockets:
+            push_notification_sockets.remove(user_socket)
+    finally:
+        if websocket.client_state.name == "CONNECTED":
+            await websocket.close()
+
+        # Remove user from notification sockets
+        if user_socket in push_notification_sockets:
+            push_notification_sockets.remove(user_socket)
+                
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)
