@@ -718,7 +718,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # Remove user from notification sockets
             for user in notification_sockets:
                 if user['Socket'] == websocket:
-                     notification_sockets.remove(user)
+                    notification_sockets.remove(user)
 
             # Check if user is still online on another device
             user_sockets = get_user_sockets(username)
