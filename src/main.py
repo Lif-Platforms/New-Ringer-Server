@@ -696,18 +696,38 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         if authenticated:
-            notification_sockets.remove(user_socket)
-
             # Get users friends
             friends = json.loads(await database.get_friends_list(username))
 
-            # Send status update to all online friends
-            for friend in friends:
-                # Check if the friend is online by looking for their socket in notification_sockets
-                for socket in notification_sockets:
-                    if socket['User'] == friend["Username"]:
-                        # If the friend is online, send them the message
-                        await socket['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False, "User": username}))
+            # Gets a list of the sockets from a user
+            def get_user_sockets(username):
+                sockets = []
+
+                for user in notification_sockets:
+                    if username == user['User']:
+                        sockets.append(user)
+
+                return sockets
+            
+            def if_in_friends(user):
+                for friend in friends:
+                    if friend["Username"] == user:
+                        return True
+                return False
+
+            # Remove user from notification sockets
+            for user in notification_sockets:
+                if user['Socket'] == websocket:
+                    notification_sockets.remove(user)
+
+            # Check if user is still online on another device
+            user_sockets = get_user_sockets(username)
+            
+            if len(user_sockets) == 0:
+                # Notify all online friends of thr status change
+                for user in notification_sockets:
+                    if if_in_friends(user["User"]):
+                        await user['Socket'].send_text(json.dumps({"Type": "USER_STATUS_UPDATE", "Online": False, "User": username}))
 
 @app.post("/register_push_notifications/{device_type}")
 async def register_push_notifications(request: Request, device_type: str):
