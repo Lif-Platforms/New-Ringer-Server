@@ -14,6 +14,7 @@ import asyncio
 from pysafebrowsing import SafeBrowsing
 from contextlib import asynccontextmanager
 import sentry_sdk
+from datetime import datetime, timezone
 
 # Init sentry
 sentry_sdk.init(
@@ -585,6 +586,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = await websocket.receive_json()
                 
                 if data["MessageType"] == "SEND_MESSAGE":
+                    # Check send time
+                    # If it was more than 5 seconds ago then discard the message
+                    try:
+                        # Parse send time
+                        send_time = datetime.strptime(data["SendTime"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+
+                        # Get the current UTC time 
+                        current_time = datetime.now(timezone.utc) 
+                        
+                        # Calculate the time difference 
+                        time_difference = current_time - send_time 
+                        
+                        # Convert the time difference to seconds 
+                        seconds_passed = time_difference.total_seconds()
+
+                        if seconds_passed > 5:
+                            continue
+                    except ValueError:
+                        pass
+
                     # Get conversation members to ensure authorization
                     members = await database.get_members(data["ConversationId"])
 
@@ -634,7 +655,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "Message": {
                                         "Author": username,
                                         "Message": data["Message"],
-                                        "Id": message_id,
+                                        "Message_Id": message_id,
                                         "Self_Destruct": self_destruct,
                                         "Message_Type": message_type,
                                         "GIF_URL": gif_url
