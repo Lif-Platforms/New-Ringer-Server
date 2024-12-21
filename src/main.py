@@ -588,7 +588,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 if data["MessageType"] == "SEND_MESSAGE":
                     # Check send time
                     # If it was more than 5 seconds ago then discard the message
-                    try:
+                    # If key is not present, ignore it and move on
+                    if "SendTime" in data:
                         # Parse send time
                         send_time = datetime.strptime(data["SendTime"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
 
@@ -603,8 +604,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         if seconds_passed > 5:
                             continue
-                    except ValueError:
-                        pass
 
                     # Get conversation members to ensure authorization
                     members = await database.get_members(data["ConversationId"])
