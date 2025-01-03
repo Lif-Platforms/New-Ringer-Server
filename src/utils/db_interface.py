@@ -264,7 +264,8 @@ async def get_messages(conversation_id: str, offset: int):
                 "Message_Id": message[3],
                 "Self_Destruct": self_destruct,
                 "Message_Type": message[8],
-                "GIF_URL": message[9]
+                "GIF_URL": message[9],
+                "Send_Time": message[10]
             })
 
         return messages

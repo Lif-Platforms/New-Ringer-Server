@@ -14,6 +14,7 @@ import asyncio
 from pysafebrowsing import SafeBrowsing
 from contextlib import asynccontextmanager
 import sentry_sdk
+from datetime import datetime, timezone
 
 # Init sentry
 sentry_sdk.init(
@@ -625,6 +626,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Tell client message was sent
                         await websocket.send_text(json.dumps({"ResponseType": "MESSAGE_SENT", "Message_Id": message_id}))
 
+                        # Get current UTC time of the message
+                        current_utc_time = datetime.now(timezone.utc) 
+                        formatted_utc_time = current_utc_time.strftime("%Y-%m-%d %H:%M:%S")
+
                         # Notify conversation members that the message was sent
                         for user in notification_sockets:
                             if user["User"] in members:
@@ -637,7 +642,8 @@ async def websocket_endpoint(websocket: WebSocket):
                                         "Id": message_id,
                                         "Self_Destruct": self_destruct,
                                         "Message_Type": message_type,
-                                        "GIF_URL": gif_url
+                                        "GIF_URL": gif_url,
+                                        "Send_Time": formatted_utc_time
                                     }
                                 }))
                         
