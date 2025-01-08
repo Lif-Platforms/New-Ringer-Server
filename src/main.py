@@ -914,6 +914,81 @@ async def live_notifications(websocket: WebSocket):
         # Remove user from notification sockets
         if user_socket in push_notification_sockets:
             push_notification_sockets.remove(user_socket)
+
+@app.get('/app_refresh')
+async def app_refresh(request: Request, last_message_id: str = None, conversation_id: str = None):
+    """
+    ## App Refresh
+    Used by Ringer Client to refresh data such as last message sent, new messages, and user presence.
+    
+    ### Query Parameters:
+    - **last_message_id (str):** The id of the last message the client has in the conversation.
+    - **conversation_id (str):** The conversation id the message is in.
+
+    ### Returns:
+    - **JSON:** Data requested by client.
+    """
+    data = {}
+
+    # Get auth credentials
+    username = request.headers.get('username')
+    token = request.headers.get('token')
+
+    # Verify credentials
+    auth_status = await auth_server.verify_token(username, token)
+
+    if auth_status == 'INVALID_TOKEN':
+        raise HTTPException(status_code=401, detail='Invalid token')
+
+    # Check if last message if was provided
+    if last_message_id:
+        # Check if conversation id was provided
+        if conversation_id:
+            # Get conversation members
+            try:
+                members = await database.get_members(conversation_id)
+            except ConversationNotFound:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+
+            if username not in members:
+                raise HTTPException(status_code=403, detail="You are not a member of this conversation")
+
+            # Get all messages after the last message id
+            results = await database.get_messages_after(
+                message_id=last_message_id,
+                conversation_id=conversation_id,
+            )
+
+            data['new_messages'] = results
+        else:
+            raise HTTPException(status_code=500, detail="Conversation id needed for last message")
+    
+    friends_presence = []
+    
+    # Get friends of user
+    friends = json.loads(await database.get_friends_list(username))
+
+    # Add all online friends to list
+    for friend in friends:
+        is_online = any(user['User'] == friend['Username'] for user in notification_sockets)
+        friends_presence.append({'username': friend['Username'], 'online': is_online})
+
+    # Add friend presence to list
+    data['friend_presence'] = friends_presence
+
+    conversation_ids = []
+
+    # Create a list of conversation ids for each friend
+    for friend in friends:
+        conversation_ids.append(friend['Id'])
+
+    # Get last sent message from each conversation
+    last_messages = await database.fetch_last_messages(conversation_ids)
+
+    # Add last sent messages to data
+    data['last_sent_messages'] = last_messages
+
+    return data
                 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8001)

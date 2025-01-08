@@ -646,3 +646,46 @@ async def search_users(user: str):
         return_users.append(user_[0])
 
     return return_users
+
+async def get_messages_after(message_id: str, conversation_id: str):
+    """
+    ## Get Messages After
+    Gets all messages in a conversation after a certain message
+
+    ### Parameters
+    message_id: the message to get messages after.
+    conversation_id: the conversation where the messages lie.
+
+    ### Returns
+    list: List of messages.
+    """
+    await connect_to_database()
+    cursor = conn.cursor()
+
+    query = f"""
+        SELECT * FROM messages
+        WHERE conversation_id = %s
+        AND id > (
+            SELECT id FROM messages
+            WHERE message_id = %s
+            ORDER BY id LIMIT 1
+        )
+    """
+
+    cursor.execute(query, (conversation_id, message_id))
+    results = cursor.fetchall()
+
+    data = []
+
+    for message in results:
+        data.append({
+            'author': message[1],
+            'content': message[2],
+            'message_id': message[3],
+            'conversation_id': message[4],
+            'self_destruct': message[5],
+            'viewed': message[6],
+            'delete_time': message[7]
+        })
+
+    return data
