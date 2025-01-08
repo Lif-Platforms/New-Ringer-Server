@@ -71,7 +71,8 @@ async def get_friends_list(account: str) -> list:
     # Check if friends list is present
     # If not, then it will be created
     if not item:
-        cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
+        cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)",
+                       (account, "[]", "[]"))
         conn.commit()
 
         return "[]"
@@ -87,7 +88,43 @@ async def get_friends_list(account: str) -> list:
         # Add unread messages to friend
         friend["Unread_Messages"] = unread_messages[0]
 
-    return friends_list
+    # Load friend data for manipulation
+    load_friends_list = json.loads(friends_list)
+
+    conversation_ids = []
+
+    # Make a list of conversation ids to check their pin status
+    for friend in load_friends_list:
+        conversation_ids.append(friend["Id"])
+
+    # Cycle through each conversation and check their pinned status
+    for conversation in conversation_ids:
+        # Get pin data of conversation
+        cursor.execute("SELECT pinned FROM conversations WHERE conversation_id = %s;",
+                       (conversation,))
+        raw_pin_data = cursor.fetchone()[0]
+
+        # Store whether the conversation is pinned
+        pinned = False
+
+        # Check if pin data exists
+        if raw_pin_data:
+            pin_data = json.loads(raw_pin_data)
+
+            # Check if user has conversation pinned
+            if account in pin_data:
+                pinned = True
+
+        # Update pin data in conversation
+        for friend in load_friends_list:
+            if friend['Id'] == conversation:
+                # Add pin data to friend
+                friend['Pinned'] = pinned
+
+    # Dump JSON data to string for compatibility
+    new_friends_list = json.dumps(load_friends_list)
+
+    return new_friends_list
 
 async def get_friend_requests(account: str):
     """
@@ -829,3 +866,44 @@ async def get_messages_after(message_id: str, conversation_id: str):
         })
 
     return data
+
+async def pin_conversation(conversation_id: str, username: str, pinned: bool):
+    """
+    ## Pin Conversation
+    Pins a conversation for a user.
+
+    ### Parameters
+    conversation_id: the conversation being pinned.
+    username: the user pinning the conversation.
+    pinned: whether the conversation is being pinned or unpinned
+
+    ### Returns
+    None
+    """
+    await connect_to_database()
+    cursor = conn.cursor()
+
+    # Get conversation pin data
+    cursor.execute("SELECT pinned FROM conversations WHERE conversation_id = %s;", (conversation_id,))
+    raw_pin_data = cursor.fetchone()
+
+    # Check if conversation has pin data
+    if raw_pin_data:
+        # Load pin data from database
+        new_pin_data = json.loads(raw_pin_data)
+    else:
+        new_pin_data = []
+
+    # Check if conversation is being pinned or unpinned
+    if pinned:
+        # Check if user already has conversation pinned
+        if username not in new_pin_data:
+            new_pin_data.append(username)
+    else:
+         # Check if user has conversation pinned
+        if username in new_pin_data:
+            new_pin_data.remove(username)
+    
+    # Update pin data in database
+    cursor.execute("UPDATE conversations SET pinned = %s WHERE conversation_id = %s;",
+                    (json.dumps(new_pin_data)))
