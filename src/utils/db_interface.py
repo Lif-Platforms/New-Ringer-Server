@@ -75,18 +75,9 @@ async def get_friends_list(account: str) -> list:
                        (account, "[]", "[]"))
         conn.commit()
 
-        return "[]"
-
-    # Get friends list from the data
-    friends_list = json.loads(item[3])
-
-    # Go through each conversation and get number of unread messages
-    for friend in friends_list:
-        cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = %s AND (viewed = 0 OR viewed IS NULL) AND author != %s", (friend["Id"], account))
-        unread_messages = cursor.fetchone()
-
-        # Add unread messages to friend
-        friend["Unread_Messages"] = unread_messages[0]
+        friends_list = "[]"
+    else:
+        friends_list = item[3]
 
     # Load friend data for manipulation
     load_friends_list = json.loads(friends_list)

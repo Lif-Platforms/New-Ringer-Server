@@ -930,6 +930,59 @@ async def live_updates(websocket: WebSocket):
 
                     # Tell client that the operation completed successfully
                     await websocket.send_json({"ResponseType": "OK"})
+
+                elif data["MessageType"] == "PIN_CONVERSATION":
+                    # Ensure all data needed is present
+                    if "Conversation_Id" not in data or "Pinned" not in data:
+                        await websocket.send_json({
+                            "ResponseType": "ERROR",
+                            "ErrorCode": "BAD_REQUEST",
+                            "Detail": "Bad data provided"
+                        })
+                        continue
+                    
+                    # Pull conversation id and pin boolean from data
+                    conversation_id = data['Conversation_Id']
+                    pinned = data['Pinned']
+
+                    # Ensure data is the correct data types
+                    if type(conversation_id) != str or type(pinned) != bool:
+                        await websocket.send_json({
+                            "ResponseType": "ERROR",
+                            "ErrorCode": "BAD_REQUEST",
+                            "Detail": "Bad data provided"
+                        })
+                        continue
+
+                    # Get conversation members
+                    try:
+                        conversation_members = await database.get_members(conversation_id)
+                    except ConversationNotFound:
+                        await websocket.send_json({
+                            "ResponseType": "ERROR",
+                            "ErrorCode": "NOT_FOUND",
+                            "Detail": "Conversation not found"
+                        })
+                        continue
+                    
+                    # Ensure user is a member of the conversation
+                    if username not in conversation_members:
+                        await websocket.send_json({
+                            "ResponseType": "ERROR",
+                            "ErrorCode": "NO_PERMISSION",
+                            "Detail": "You are not a member of this conversation"
+                        })
+                        continue
+                    
+                    # Pin conversation in database
+                    await database.pin_conversation(
+                        conversation_id=conversation_id,
+                        username=username,
+                        pinned=pinned
+                    )
+
+                    # Tell client that the operation completed successfully
+                    await websocket.send_json({"ResponseType": "OK"})
                 else:
                     await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
 
