@@ -68,8 +68,6 @@ async def get_friends_list(account):
     else:
         friends_list = item[3]
 
-    print(friends_list)
-
     return friends_list
 
 async def get_friend_requests(account):
