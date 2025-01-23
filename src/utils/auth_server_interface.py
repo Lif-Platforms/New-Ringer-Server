@@ -36,6 +36,6 @@ class auth_server_interface:
             return True
         else:
             raise self.InvalidToken
-    
+
     class InvalidToken(Exception):
         pass
