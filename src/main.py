@@ -274,7 +274,7 @@ async def get_friend_requests_v2(request: Request):
     # Get user friends list
     requests_list = await database.get_friend_requests(account=username)
 
-    return json.loads(requests_list)
+    return requests_list
 
 @app.get('/add_friend/{username}/{token}/{add_user}') 
 async def add_friend(username, token, add_user):
@@ -291,7 +291,7 @@ async def add_friend(username, token, add_user):
     return {"Status": "Ok"}
     
 @app.post("/add_friend")
-async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, user: str = Form()):
+async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, recipient: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -303,16 +303,31 @@ async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, use
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
+    
+    # Get user friends to prevent sending a friend request to friends
+    user_friends = json.loads(await database.get_friends_list(username))
+
+    # Check if user is already friends with recipient
+    for user in user_friends:
+        if user['Username'] == recipient:
+            raise HTTPException(status_code=409, detail="Already friends with this user.")
 
     # Add request to database
-    await database.add_new_friend(account=user, username=username)
+    try:
+        await database.add_new_friend(sender=username, recipient=recipient)
+    except database.AccountNotFound:
+        raise HTTPException(status_code=404, detail="User not found.")
+    except database.RequestAlreadyOutgoing:
+        raise HTTPException(status_code=409, detail="You already have an outgoing friend request to this user.")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Check if user is online
-    user_online = await live_ws_conn_handler.get_presence(user)
+    user_online = await live_ws_conn_handler.get_presence(recipient)
 
     # Checks if recipient is online. If not, a push notification will be sent to their devices
     if not user_online:
-        background_tasks.add_task(send_push_notification, username, f"{username} sent you a friend request!", {}, user)
+        background_tasks.add_task(send_push_notification, username, f"{username} sent you a friend request!", {}, recipient)
 
     return "Request Sent!"
     
@@ -341,7 +356,7 @@ async def add_friend(username, token, accept_user):
     return {"Status": "Ok"}
     
 @app.post("/accept_friend_request")
-async def accept_friend_request_v2(request: Request, background_tasks: BackgroundTasks, user: str = Form()):
+async def accept_friend_request_v2(request: Request, background_tasks: BackgroundTasks, request_id: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -354,12 +369,19 @@ async def accept_friend_request_v2(request: Request, background_tasks: Backgroun
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
 
-    # Accept friend request and get new conversation id
-    conversation_id = await database.accept_friend(account=username, friend=user)
+    # Accept friend request and get new conversation id as well as sender
+    try:
+        conversation_id, request_sender = await database.accept_friend(request_id=request_id, account=username)
+    except database.NotFound:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    except database.NoPermission:
+        raise HTTPException(status_code=403, detail="You cannot accept this request.")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Notify sender request was accepted (if online)
     await live_ws_conn_handler.send_message(
-        users=user,
+        users=request_sender,
         message={
             "Type": "FRIEND_REQUEST_ACCEPT",
             "User": username,
@@ -368,10 +390,10 @@ async def accept_friend_request_v2(request: Request, background_tasks: Backgroun
     )
 
     # Checks if recipient is online. If not, a push notification will be sent to their devices
-    user_online = await live_ws_conn_handler.get_presence(user)
+    user_online = await live_ws_conn_handler.get_presence(request_sender)
 
     if not user_online:
-        background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, user)
+        background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, request_sender)
 
     return "Request Accepted!"
 
@@ -390,7 +412,7 @@ async def deny_friend(username, token, deny_user):
     return {"Status": "Ok"}
 
 @app.post("/deny_friend_request")
-async def deny_friend_v2(request: Request, user: str = Form()):
+async def deny_friend_v2(request: Request, request_id: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -404,7 +426,12 @@ async def deny_friend_v2(request: Request, user: str = Form()):
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Deny friend request
-    await database.deny_friend(username, user)
+    try:
+        await database.deny_friend(request_id=request_id, account=username)
+    except database.NotFound:
+        raise HTTPException(status_code=404, detail="Request not found.")
+    except database.NoPermission:
+        raise HTTPException(status_code=403, detail="You cannot deny this request.")
 
     return "Request Denied!"
 
