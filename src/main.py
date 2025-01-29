@@ -435,6 +435,35 @@ async def deny_friend_v2(request: Request, request_id: str = Form()):
 
     return "Request Denied!"
 
+@app.get('/outgoing_friend_requests')
+async def outgoing_friend_requests(request: Request):
+    """
+    ## Outgoing Friend Requests
+    Get a list of outgoing friend requests for the user.
+
+    ### Headers:
+    - **username (str):** The username of the user.
+    - **token (str):** The user's token.
+
+    ### Returns:
+    - **JSON:** A list of outgoing friend requests.
+    """
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    try:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
+        raise HTTPException(status_code=401, detail="Invalid token!")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
+    requests_list = await database.get_outgoing_friend_requests(account=username)
+
+    return requests_list
+
 @app.post('/send_message')
 async def send_message(request: Request):
     data = await request.json()  # Parse JSON data from the request body
