@@ -120,7 +120,7 @@ class AccountNotFound(Exception):
 class RequestAlreadyOutgoing(Exception):
     pass
 
-async def add_new_friend(sender: str, recipient: str) -> str: 
+async def add_new_friend(sender: str, recipient: str) -> str:
     """
     Adds a new friend request from the sender to the recipient.
     Args:
