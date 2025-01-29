@@ -2,6 +2,7 @@ import mysql.connector
 from mysql.connector.constants import ClientFlag
 import json
 import uuid
+import datetime
 
 # Allows config to be set by main script
 def set_config(config):
@@ -70,7 +71,16 @@ async def get_friends_list(account):
 
     return friends_list
 
-async def get_friend_requests(account):
+async def get_friend_requests(account: str):
+    """
+    Get all friend requests for a user.
+    Args:
+        account (str): The account identifier of the user.
+    Returns:
+        friend_requests (list): A list of friend requests.
+    Raises:
+        None
+    """
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -79,124 +89,180 @@ async def get_friend_requests(account):
     cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
     item = cursor.fetchone()
 
-    requests_list = None
-
     # Check if friend requests list is present
     # If not, then it will be created
     if not item:
         cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
         conn.commit()
 
-        requests_list = "[]"
+        return []
     else:
-        requests_list = item[2]
-    
-    return requests_list
+        # Get all friend requests from the database
+        cursor.execute("SELECT * FROM friend_requests WHERE recipient = %s", (account,))
+        data = cursor.fetchall()
 
-async def add_new_friend(account, username): 
+        friend_requests = []
+
+        # Format friend requests
+        for request in data:
+            friend_requests.append({
+                "Sender": request[1],
+                "Recipient": request[2],
+                "Request_Id": request[4],
+                "Create_Time": request[3]
+            })
+
+        return friend_requests
+
+class AccountNotFound(Exception):
+    pass
+
+class RequestAlreadyOutgoing(Exception):
+    pass
+
+async def add_new_friend(sender: str, recipient: str) -> str:
+    """
+    Adds a new friend request from the sender to the recipient.
+    Args:
+        sender (str): The account identifier of the sender.
+        recipient (str): The account identifier of the recipient.
+    Raises:
+        AccountNotFound: If the recipient account does not exist.
+        RequestAlreadyOutgoing: If there is already an outgoing friend request from the sender to the recipient.
+    Returns:
+        request_id (str): The id of the newly created request.
+    """
     await connect_to_database()
-
     cursor = conn.cursor()
 
     # Gets all data from the database
-    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
+    cursor.execute("SELECT * FROM users WHERE account = %s", (recipient,))
     database_account = cursor.fetchone()
 
     # Check if account exists
-    if database_account:
-        # Load current requests
-        requests = json.loads(database_account[2])
+    if not database_account:
+        raise AccountNotFound
 
-        # Add request
-        requests.append({'name': username})
-        
-        # Update requests in database
-        cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(requests), account))
+    # Check if a request is already outgoing to this user
+    cursor.execute("SELECT * FROM friend_requests WHERE sender = %s AND recipient = %s", (sender, recipient,))
+    request = cursor.fetchone()
 
-        conn.commit()
+    # If request exists then throw an error
+    if request:
+        raise RequestAlreadyOutgoing
+    
+    # Generate request info
+    request_id = str(uuid.uuid4())
+    request_date = datetime.datetime.now(datetime.timezone.utc)
 
-async def accept_friend(account, friend): 
+    # Add request to database
+    cursor.execute("""INSERT INTO friend_requests (sender, recipient, create_time, request_id)
+                   VALUES (%s, %s, %s, %s)""", (sender, recipient, request_date, request_id,))
+    conn.commit()
+
+    return request_id
+
+class NotFound(Exception):
+    pass
+
+class NoPermission(Exception):
+    pass
+
+async def accept_friend(request_id: str, account: str) -> str:
+    """
+    Accepts a friend request from a user.
+    Args:
+        request_id (str): The identifier for the request.
+        account (str): The account accepting the request.
+    Raises:
+        NotFound: If the request does not exist.
+        NoPermission: If the user does not have permission to accept the request.
+    Returns:
+        conversation_id (str): The id of the newly created conversation.
+        sender (str): The user who sent the request.
+    """
     await connect_to_database()
-
     cursor = conn.cursor()
 
-    # Get account and friend from database
-    cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
-    database_account = cursor.fetchone()
+    # Fetch request from database
+    cursor.execute("SELECT * FROM friend_requests WHERE request_id = %s", (request_id,))
+    request = cursor.fetchone()
 
-    cursor.execute("SELECT * FROM users WHERE account = %s", (friend,))
-    database_friend = cursor.fetchone()
-
+    # Check if request exists
+    if not request:
+        raise NotFound
+    
+    # Check if user has permission to accept this request
+    if request[2] != account:
+        raise NoPermission
+    
     # Generate a conversation id
     conversation_id = str(uuid.uuid4())
 
-    # Load account friend requests
-    account_friend_requests = json.loads(database_account[2])
+    # Get sender account friends
+    cursor.execute("SELECT friends FROM users WHERE account = %s", (request[1],))
+    sender_account = cursor.fetchone()
 
-    # Keep track of list index
-    index = 0
+    # Load sender friends
+    sender_friends = json.loads(sender_account[0])
 
-    # Remove friend request
-    for request in account_friend_requests:
-        if request["name"] == friend:
-            account_friend_requests.remove(account_friend_requests[index]) 
-        else:
-            index += 1
+    # Add friend to user friends
+    sender_friends.append({"Username": request[2], "Id": conversation_id})
 
-    # Update database
-    cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(account_friend_requests), account))
-    conn.commit()
+    # Update friends in database
+    cursor.execute("UPDATE users SET friends = %s WHERE account = %s",
+                   (json.dumps(sender_friends), request[1]))
+    
+    # Get recipient friends
+    cursor.execute("SELECT friends FROM users WHERE account = %s", (request[2],))
+    recipient_account = cursor.fetchone()
 
-    # Load account friends
-    account_friends = json.loads(database_account[3])
+    # Load recipient friends
+    recipient_friends = json.loads(recipient_account[0])
 
-    # Add friend to account
-    account_friends.append({"Username": friend, "Id": conversation_id})
+    # Add friend to user friends
+    recipient_friends.append({"Username": request[1], "Id": conversation_id})
 
-    # Update database
-    cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(account_friends), account))
-    conn.commit()
-
-    # Load friend's friends
-    friend_friends = json.loads(database_friend[3])
-
-    # Add friend
-    friend_friends.append({"Username": account, "Id": conversation_id})
-
-    # Update database
-    cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(friend_friends), friend))
-    conn.commit()
-
+    # Update friends in database
+    cursor.execute("UPDATE users SET friends = %s WHERE account = %s",
+                   (json.dumps(sender_friends), request[2]))
+    
     # Create conversation
-    cursor.execute("INSERT INTO conversations (conversation_id, members) VALUES (%s, %s)", (conversation_id, json.dumps([account, friend])))
+    cursor.execute("INSERT INTO conversations (conversation_id, members) VALUES (%s, %s)",
+                   (conversation_id, json.dumps([request[1], request[2]])))
     conn.commit()
 
-    return conversation_id
+    return conversation_id, request[1]
 
-async def deny_friend(username, deny_user): 
+async def deny_friend(request_id: str, account: str) -> None:
+    """
+    Denies a friend request from a user.
+    Args:
+        request_id (str): The identifier for the request.
+        account (str): The account denying the request.
+    Raises:
+        NotFound: If the request does not exist.
+        NoPermission: If the user does not have permission to deny the request.
+    Returns:
+        None
+    """
     await connect_to_database()
-
     cursor = conn.cursor()
 
-    # Get account requests
-    cursor.execute("SELECT * FROM users WHERE account = %s", (username,))
-    account = cursor.fetchone()
+    # Get request from database
+    cursor.execute("SELECT * from friend_requests WHERE request_id = %s", (request_id,))
+    request = cursor.fetchone()
 
-    # Load friend requests
-    friend_requests = json.loads(account[2])
-
-    # Keep track of list index
-    index = 0
-
-    # Remove user
-    for request in friend_requests:
-        if request["name"] == deny_user:
-            friend_requests.remove(friend_requests[index])
-        else:
-            index += 1
-
-    # Update database
-    cursor.execute("UPDATE users SET friend_requests = %s WHERE account = %s", (json.dumps(friend_requests), username))
+    # Check if request exists
+    if not request:
+        raise NotFound
+    
+    # Check if user has permission to deny the request
+    if request[2] != account:
+        raise NoPermission
+    
+    # Remove request from database
+    cursor.execute("DELETE FROM friend_requests WHERE request_id = %s", (request_id,))
     conn.commit()
 
 async def send_message(author, conversation_id, message, self_destruct, message_type = None, gif_url = None):
