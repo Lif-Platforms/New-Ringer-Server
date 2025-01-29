@@ -265,6 +265,37 @@ async def deny_friend(request_id: str, account: str) -> None:
     cursor.execute("DELETE FROM friend_requests WHERE request_id = %s", (request_id,))
     conn.commit()
 
+async def get_outgoing_friend_requests(account: str) -> list:
+    """
+    Get all outgoing friend requests for a user.
+    Args:
+        account (str): The account identifier of the user.
+    Returns:
+        friend_requests (list): A list of outgoing friend requests.
+    Raises:
+        None
+    """
+    await connect_to_database()
+
+    cursor = conn.cursor()
+
+    # Get all friend requests from the database
+    cursor.execute("SELECT * FROM friend_requests WHERE sender = %s", (account,))
+    data = cursor.fetchall()
+
+    friend_requests = []
+
+    # Format friend requests
+    for request in data:
+        friend_requests.append({
+            "Sender": request[1],
+            "Recipient": request[2],
+            "Request_Id": request[4],
+            "Create_Time": request[3]
+        })
+
+    return friend_requests
+
 async def send_message(author, conversation_id, message, self_destruct, message_type = None, gif_url = None):
     await connect_to_database()
 
