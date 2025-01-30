@@ -230,6 +230,10 @@ async def accept_friend(request_id: str, account: str) -> str:
     # Create conversation
     cursor.execute("INSERT INTO conversations (conversation_id, members) VALUES (%s, %s)",
                    (conversation_id, json.dumps([request[1], request[2]])))
+    
+    # Remove request from database
+    cursor.execute("DELETE FROM friend_requests WHERE request_id = %s", (request_id,))
+    
     conn.commit()
 
     return conversation_id, request[1]
