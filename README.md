@@ -9,14 +9,12 @@
 
 
 # 🌐 New-Ringer-Server
-Ringer server is the server code for the Ringer messaging app. The code here is snapshot code so it may not work as intended. 
+Ringer Server is the server code for the Ringer messaging app. It's what powers the Ringer messaging app.
 
 # 👋🏻 HELP WANTED
-Lif Platforms is looking for contributers for Ringer and other services from Lif. If you are interested please reach out at: Lif.Platforms@gmail.com
+Lif Platforms is looking for contributors for Ringer and other services from Lif. If you are interested please reach out to: Lif.Platforms@gmail.com
 
 # 💬 Client Code
-Ringers client code is located in another repository: https://github.com/Lif-Platforms/Ringer-Client-Desktop
-
-# ⏬ Instalation and Use
-To learn about how to setup an use Ringer Server, check out our wiki page.
-https://github.com/Lif-Platforms/New-Ringer-Server/wiki 
+See the our Ringer clients:
+- [Ringer Desktop](https://github.com/Lif-Platforms/Ringer-Client-Desktop)
+- [Ringer Mobile](https://github.com/Lif-Platforms/Ringer-Client-Mobile)
