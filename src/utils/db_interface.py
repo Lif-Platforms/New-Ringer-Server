@@ -108,16 +108,7 @@ async def get_friends_list(account):
 
     return new_friends_list
 
-async def get_friend_requests(account: str):
-    """
-    Get all friend requests for a user.
-    Args:
-        account (str): The account identifier of the user.
-    Returns:
-        friend_requests (list): A list of friend requests.
-    Raises:
-        None
-    """
+async def get_friend_requests(account):
     await connect_to_database()
 
     cursor = conn.cursor()
