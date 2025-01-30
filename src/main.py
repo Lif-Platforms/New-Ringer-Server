@@ -984,7 +984,7 @@ async def live_updates(websocket: WebSocket):
                     # Tell client that the operation completed successfully
                     await websocket.send_json({"ResponseType": "OK"})
                 else:
-                    await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
+                    await websocket.send_json({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"})
 
     except WebSocketDisconnect:
         if authenticated:
