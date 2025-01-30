@@ -871,9 +871,9 @@ async def live_updates(websocket: WebSocket):
                                 "Detail": "You cannot view your own message."
                             }))
                     else:
-                            await websocket.send_text(json.dumps({'ResponseType': "ERROR", "ErrorCode": "NOT_FOUND"}))
+                        await websocket.send_json({'ResponseType': "ERROR", "ErrorCode": "NOT_FOUND"})
                 else:
-                    await websocket.send_json(json.dumps({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"}))
+                    await websocket.send_json({"ResponseType": "ERROR", "ErrorCode": "BAD_REQUEST"})
 
     except WebSocketDisconnect:
         if authenticated:
