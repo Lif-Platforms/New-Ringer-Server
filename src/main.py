@@ -395,7 +395,7 @@ async def accept_friend_request_v2(request: Request, background_tasks: Backgroun
     if not user_online:
         background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, request_sender)
 
-    return "Request Accepted!"
+    return {"name": request_sender, "conversation_id": conversation_id, "sender_presence": user_online}
 
 @app.get('/deny_friend_request/{username}/{token}/{deny_user}')
 async def deny_friend(username, token, deny_user):
