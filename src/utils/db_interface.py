@@ -48,7 +48,16 @@ async def connect_to_database():
         if not conn.is_connected():
             connect()
 
-async def get_friends_list(account):
+async def get_friends_list(account: str) -> list:
+    """
+    Gets all friends of a user.
+    Args:
+        account (str): The account identifier of the user.
+    Raises:
+        None
+    Returns:
+        friends_list (list): A list of friends.
+    """
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -65,9 +74,18 @@ async def get_friends_list(account):
         cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
         conn.commit()
 
-        friends_list = "[]"
-    else:
-        friends_list = item[3]
+        return "[]"
+
+    # Get friends list from the data
+    friends_list = json.loads(item[3])
+
+    # Go through each conversation and get number of unread messages
+    for friend in friends_list:
+        cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = %s AND (viewed = 0 OR viewed IS NULL) AND author != %s", (friend["Id"], account))
+        unread_messages = cursor.fetchone()
+
+        # Add unread messages to friend
+        friend["Unread_Messages"] = unread_messages[0]
 
     return friends_list
 
@@ -326,7 +344,19 @@ async def send_message(author, conversation_id, message, self_destruct, message_
     else:
         raise ConversationNotFound()
     
-async def get_messages(conversation_id: str, offset: int):
+async def get_messages(conversation_id: str, offset: int, account: str) -> tuple[list, str]:
+    """
+    Gets messages from a conversation.
+    Args:
+        conversation_id (str): The identifier for the conversation.
+        offset (int): The offset for fetching messages in the database.
+        account (str): The account requesting the messages.
+    Raises:
+        Exception: Conversation not found.
+    Returns:
+        messages (list): List of messages.
+        unread_messages (int): Number of unread messages.
+    """
     await connect_to_database()
 
     cursor = conn.cursor()
@@ -364,10 +394,15 @@ async def get_messages(conversation_id: str, offset: int):
                 "Self_Destruct": self_destruct,
                 "Message_Type": message[8],
                 "GIF_URL": message[9],
-                "Send_Time": message[10]
+                "Send_Time": message[10],
+                "Viewed": bool(message[6])
             })
 
-        return messages
+        # Get number of unread messages
+        cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = %s AND (viewed = 0 OR viewed IS NULL) AND author != %s", (conversation_id, account))
+        unread_messages = cursor.fetchone()
+
+        return messages, unread_messages[0]
     else:
         raise Exception("Conversation Not Found")
 

@@ -198,7 +198,7 @@ async def get_friends(username: str, token: str):
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Get friends list from server
-    friends_list = json.loads(await database.get_friends_list(username))
+    friends_list = await database.get_friends_list(username)
     
     return friends_list
        
@@ -216,7 +216,7 @@ async def get_friends_v2(request: Request):
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
 
-    friends_list = json.loads(await database.get_friends_list(username))
+    friends_list = await database.get_friends_list(username)
 
     # Cycle through friends and add their online status
     for friend in friends_list:
@@ -305,7 +305,7 @@ async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, rec
         raise HTTPException(status_code=500, detail="Internal server error.")
     
     # Get user friends to prevent sending a friend request to friends
-    user_friends = json.loads(await database.get_friends_list(username))
+    user_friends = await database.get_friends_list(username)
 
     # Check if user is already friends with recipient
     for user in user_friends:
@@ -529,7 +529,11 @@ async def load_messages_v2(request: Request, conversation_id: str, offset: int =
     if username in members:
         try:
             # Get all messages from database
-            messages = await database.get_messages(conversation_id, offset)
+            messages, unread_messages = await database.get_messages(
+                conversation_id=conversation_id,
+                offset=offset,
+                account=username
+            )
             messages.reverse()
 
             # Set conversation name based on who is loading it
@@ -542,6 +546,7 @@ async def load_messages_v2(request: Request, conversation_id: str, offset: int =
             data = {
                 "conversation_name": conversation_name,
                 "conversation_id": conversation_id,
+                "unread_messages": unread_messages,
                 "messages": messages
             }
 
@@ -685,7 +690,7 @@ async def live_updates(websocket: WebSocket):
 
                 # Get user friends from database
                 # This will be used to send a presence update to all friends
-                friends = json.loads(await database.get_friends_list(username))
+                friends = await database.get_friends_list(username)
 
                 # Create user list based on friends list
                 # This essentially removes the conversation id from the data and just has a list of usernames
@@ -887,7 +892,7 @@ async def live_updates(websocket: WebSocket):
             # If user is not online, send a presence update to all friends reflecting this change
             if not user_online:
                 # Get users friends
-                friends = json.loads(await database.get_friends_list(username))
+                friends = await database.get_friends_list(username)
 
                 # Make a new list of friends without the conversation ids
                 notify_users = []
@@ -1113,7 +1118,7 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
     friends_presence = []
     
     # Get friends of user
-    friends = json.loads(await database.get_friends_list(username))
+    friends = await database.get_friends_list(username)
 
     # Add all online friends to list
     for friend in friends:
@@ -1134,6 +1139,10 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
 
     # Add last sent messages to data
     data['last_sent_messages'] = last_messages
+
+    # Get list of friends and add it to data
+    friends_list = await database.get_friends_list(username)
+    data['friends_list'] = friends_list
 
     return data
                 
