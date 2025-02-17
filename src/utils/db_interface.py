@@ -399,7 +399,13 @@ async def get_messages(conversation_id: str, offset: int, account: str) -> tuple
             })
 
         # Get number of unread messages
-        cursor.execute("SELECT COUNT(*) FROM messages WHERE conversation_id = %s AND (viewed = 0 OR viewed IS NULL) AND author != %s", (conversation_id, account))
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages "
+            "WHERE conversation_id = %s "
+            "AND (viewed = 0 OR viewed IS NULL) "
+            "AND author != %s", 
+            (conversation_id, account)
+        )
         unread_messages = cursor.fetchone()
 
         return messages, unread_messages[0]
