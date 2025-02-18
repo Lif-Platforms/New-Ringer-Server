@@ -94,7 +94,13 @@ class live_ws_handler:
             # Parse through active connections to check if online
             for connection in self.active_connections:
                 if connection['user'] == user and connection['websocket'] not in sent_conns:
-                    await connection['websocket'].send_json(message)
+                    # Try to send message to user
+                    # If fails, disconnect user
+                    try:
+                        await connection['websocket'].send_json(message)
+                    except:
+                        # Remove user from sockets list
+                        self.disconnect_user(connection['websocket'])
 
                     # Add websocket to sent connections to avoid duplicate sending
                     sent_conns.append(connection['websocket'])
