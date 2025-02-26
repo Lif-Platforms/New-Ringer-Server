@@ -1,174 +1,10 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Form, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from utils.auth_server_interface import auth_server_interface
-import utils.db_interface as database
-from utils.db_interface import ConversationNotFound
-from urllib.parse import quote
-import json
-import uvicorn
-import os
-import yaml
-from __version__ import version
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks, Form
+from ..dependencies import get_db, get_auth
 import requests
-import asyncio
-from pysafebrowsing import SafeBrowsing
-from contextlib import asynccontextmanager
-import sentry_sdk
-from datetime import datetime, timezone
 
-# Init sentry
-sentry_sdk.init(
-    dsn="https://f6207dc4d931cccac8338baa0cfb4440@o4507181227769856.ingest.us.sentry.io/4508237654982656",
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for tracing.
-    traces_sample_rate=1.0,
-    _experiments={
-        # Set continuous_profiling_auto_start to True
-        # to automatically start the profiler on when
-        # possible.
-        "continuous_profiling_auto_start": True,
-    },
-)
+main_router = APIRouter()
 
-resources_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recourses")
-
-# Get run environment
-__env__= os.getenv('RUN_ENVIRONMENT')
-
-# Determine whether or not to show the documentation
-if __env__ == "PRODUCTION":
-    docs_url = None
-else:
-    docs_url = '/docs'
-
-if not os.path.isfile("config.yml"):
-    with open("config.yml", 'x') as config:
-        config.close()
-
-with open("config.yml", "r") as config:
-    contents = config.read()
-    configurations = yaml.safe_load(contents)
-    config.close()
-
-# Ensure the configurations are not None
-if configurations == None:
-    configurations = {}
-
-# Open reference json file for config
-with open(f"{resources_folder}/json data/default_config.json", "r") as json_file:
-    json_data = json_file.read()
-    default_config = json.loads(json_data)
-    
-# Compare config with json data
-for option in default_config:
-    if not option in configurations:
-        configurations[option] = default_config[option]
-        
-# Open config in write mode to write the updated config
-with open("config.yml", "w") as config:
-    new_config = yaml.safe_dump(configurations)
-    config.write(new_config)
-    config.close()
-
-# Set config in utility scripts
-database.set_config(configurations)
-
-# Init auth server interface
-auth_server = auth_server_interface(configurations['auth-server-url'])
-
-# Create live updates websocket class for handling this connection
-class live_ws_handler:
-    def __init__(self):
-        self.active_connections = []
-
-    async def connect_user(self, websocket: WebSocket, user: str):
-        self.active_connections.append({'user': user, 'websocket': websocket})
-
-    async def send_message(self, users: list, message: object):
-        # Keep track of connections message has been sent to
-        # This is to prevent sending the same message twice to any client
-        sent_conns = []
-
-        # Parse through listed users and check if online
-        for user in users:
-            # Parse through active connections to check if online
-            for connection in self.active_connections:
-                if connection['user'] == user and connection['websocket'] not in sent_conns:
-                    # Try to send message to user
-                    # If fails, disconnect user
-                    try:
-                        await connection['websocket'].send_json(message)
-                    except:
-                        # Remove user from sockets list
-                        self.disconnect_user(connection['websocket'])
-
-                    # Add websocket to sent connections to avoid duplicate sending
-                    sent_conns.append(connection['websocket'])
-    
-    async def get_presence(self, user: str):
-        # If user is on active connections return true
-        # Otherwise return false
-        for connection in self.active_connections:
-            if connection['user'] == user:
-                return True
-            
-        return False
-    
-    async def disconnect_user(self, websocket: WebSocket):
-        # Remove user from active connections
-        for connection in self.active_connections:
-            if connection['websocket'] == websocket:
-                self.active_connections.remove(connection)
-
-# Create instance of live updates ws handler
-live_ws_conn_handler = live_ws_handler()
-
-async def destruct_messages():
-    while True:
-        # Get delete messages
-        messages = await database.get_delete_messages()
-        
-        # Notify clients to delete the message
-        for message in messages:
-            members = await database.get_members(message['conversation_id'])
-
-            await live_ws_handler.send_message(
-                users=members,
-                message={
-                    "Type": "DELETE_MESSAGE",
-                    "Conversation_Id": message['conversation_id'],
-                    "Message_Id": message['message_id']
-                }
-            )
-
-        await database.destruct_messages()
-
-        await asyncio.sleep(10)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Code to run at startup
-    task = asyncio.create_task(destruct_messages())
-    yield
-    # Code to run at shutdown
-    task.cancel()
-
-app = FastAPI(
-    title="Ringer Server",
-    description="Official server for the Ringer messaging app.",
-    version=version,
-    lifespan=lifespan,
-    docs_url=docs_url,
-    redoc_url=None
-)
-
-# Allow Cross-Origin Resource Sharing (CORS) for all origins
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# List of users connected to the push-notifications service
-push_notification_sockets = []
-
-async def send_push_notification(title: str, body: str, data: dict, account: str):
+async def send_push_notification(database, title: str, body: str, data: dict, account: str):
     # Get push tokens from database
     push_tokens = await database.get_mobile_push_token(account)
 
@@ -188,36 +24,21 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
         
         # Send notifications to devices
         requests.post("https://exp.host/--/api/v2/push/send", json=messages, timeout=10)
-
-@app.get('/')
-async def home():
-    return {"name": "Ringer Server", "version": version}
-
-@app.get('/get_friends_list/{username}/{token}')
-async def get_friends(username: str, token: str):
-    # Authenticate credentials with auth server
-    try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-    # Get friends list from server
-    friends_list = await database.get_friends_list(username)
-    
-    return friends_list
        
-@app.get("/get_friends")
-async def get_friends_v2(request: Request):
+@main_router.get("/get_friends")
+async def get_friends_v2(
+    request: Request,
+    auth_server_ = Depends(get_auth),
+    database = Depends(get_db)
+):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
 
     # Verify user token
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth_server_.verify_token(username, token)
+    except auth_server_.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -245,34 +66,21 @@ async def get_friends_v2(request: Request):
                 friend["Last_Message"] = message['message']
 
     return friends_list
-    
-@app.get('/get_friend_requests/{username}/{token}')
-async def get_friend_requests(username: str, token: str):
-    # Verifies token with auth server
-    try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
 
-    requests_list = await database.get_friend_requests(account=username)
-
-    if requests_list:
-        return requests_list
-    else:
-        raise HTTPException(status_code=404, detail="Friend requests not found!")
-    
-@app.get("/get_friend_requests")
-async def get_friend_requests_v2(request: Request):
+@main_router.get("/get_friend_requests")
+async def get_friend_requests_v2(
+    request: Request,
+    auth_server_ = Depends(get_auth),
+    database = Depends(get_db)
+):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
 
     # Verify user token
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth_server_.verify_token(username, token)
+    except auth_server_.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -281,31 +89,23 @@ async def get_friend_requests_v2(request: Request):
     requests_list = await database.get_friend_requests(account=username)
 
     return requests_list
-
-@app.get('/add_friend/{username}/{token}/{add_user}') 
-async def add_friend(username, token, add_user):
-    # Verifies token with auth server
-    try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
-
-    await database.add_new_friend(account=add_user, username=username)
-
-    return {"Status": "Ok"}
     
-@app.post("/add_friend")
-async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, recipient: str = Form()):
+@main_router.post("/add_friend")
+async def add_friend_v2(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    recipient: str = Form(),
+    auth_server_ = Depends(get_auth),
+    database = Depends(get_db)
+):
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth_server_.verify_token(username, token)
+    except auth_server_.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -337,7 +137,7 @@ async def add_friend_v2(request: Request, background_tasks: BackgroundTasks, rec
 
     return "Request Sent!"
     
-@app.get('/accept_friend_request/{username}/{token}/{accept_user}')
+@main_router.get('/accept_friend_request/{username}/{token}/{accept_user}')
 async def add_friend(username, token, accept_user): 
     # Verifies token with auth server
     try:
@@ -361,7 +161,7 @@ async def add_friend(username, token, accept_user):
     
     return {"Status": "Ok"}
     
-@app.post("/accept_friend_request")
+@main_router.post("/accept_friend_request")
 async def accept_friend_request_v2(request: Request, background_tasks: BackgroundTasks, request_id: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -403,7 +203,7 @@ async def accept_friend_request_v2(request: Request, background_tasks: Backgroun
 
     return {"name": request_sender, "conversation_id": conversation_id, "sender_presence": user_online}
 
-@app.get('/deny_friend_request/{username}/{token}/{deny_user}')
+@main_router.get('/deny_friend_request/{username}/{token}/{deny_user}')
 async def deny_friend(username, token, deny_user):
     # Verifies token with auth server
     try:
@@ -417,7 +217,7 @@ async def deny_friend(username, token, deny_user):
 
     return {"Status": "Ok"}
 
-@app.post("/deny_friend_request")
+@main_router.post("/deny_friend_request")
 async def deny_friend_v2(request: Request, request_id: str = Form()):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -441,7 +241,7 @@ async def deny_friend_v2(request: Request, request_id: str = Form()):
 
     return "Request Denied!"
 
-@app.get('/outgoing_friend_requests')
+@main_router.get('/outgoing_friend_requests')
 async def outgoing_friend_requests(request: Request):
     """
     ## Outgoing Friend Requests
@@ -470,7 +270,7 @@ async def outgoing_friend_requests(request: Request):
 
     return requests_list
 
-@app.post('/send_message')
+@main_router.post('/send_message')
 async def send_message(request: Request):
     data = await request.json()  # Parse JSON data from the request body
     username = data.get('username')
@@ -506,7 +306,7 @@ async def send_message(request: Request):
 
     return {"Status": "Ok"}
 
-@app.get("/load_messages/{conversation_id}")
+@main_router.get("/load_messages/{conversation_id}")
 async def load_messages_v2(request: Request, conversation_id: str, offset: int = 0):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -570,7 +370,7 @@ async def load_messages_v2(request: Request, conversation_id: str, offset: int =
     else:
         raise HTTPException(status_code=403, detail="You are not a member of this conversation")
 
-@app.get('/remove_conversation/{conversation_id}/{username}/{token}')
+@main_router.get('/remove_conversation/{conversation_id}/{username}/{token}')
 async def remove_conversation(conversation_id, username, token):
     # Verify token 
     try:
@@ -613,7 +413,7 @@ async def remove_conversation(conversation_id, username, token):
     else:
         raise HTTPException(status_code=500, detail="Internal Server Error!")
 
-@app.delete("/remove_conversation/{conversation_id}")
+@main_router.delete("/remove_conversation/{conversation_id}")
 async def remove_conversation_v2(request: Request, conversation_id: str):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -660,7 +460,7 @@ async def remove_conversation_v2(request: Request, conversation_id: str):
     else:
         raise HTTPException(status_code=500, detail="Internal Server Error!")
 
-@app.websocket("/live_updates")
+@main_router.websocket("/live_updates")
 async def live_updates(websocket: WebSocket):
     # Accept the connection
     await websocket.accept()
@@ -916,7 +716,7 @@ async def live_updates(websocket: WebSocket):
                     }
                 )
 
-@app.post("/register_push_notifications/{device_type}")
+@main_router.post("/register_push_notifications/{device_type}")
 async def register_push_notifications(request: Request, device_type: str):
     # Get auth info
     username = request.headers.get("username")
@@ -942,7 +742,7 @@ async def register_push_notifications(request: Request, device_type: str):
     else:
         raise HTTPException(status_code=400, detail="Invalid device type. Supported types: 'mobile'.")
 
-@app.post("/unregister_push_notifications/{device_type}")
+@main_router.post("/unregister_push_notifications/{device_type}")
 async def unregister_push_notifications(request: Request, device_type: str):
     # Get auth info
     username = request.headers.get("username")
@@ -968,7 +768,7 @@ async def unregister_push_notifications(request: Request, device_type: str):
     else:
         raise HTTPException(status_code=400, detail="Invalid device type. Supported types: 'mobile'.")
 
-@app.post("/link_safety_check")
+@main_router.post("/link_safety_check")
 async def link_safety_check(request: Request):
     # Load API key from config
     api_key = configurations['safe-browsing-api-key']
@@ -990,7 +790,7 @@ async def link_safety_check(request: Request):
     else:
         return {"safe": True}
     
-@app.get("/search_gifs")
+@main_router.get("/search_gifs")
 async def search_gifs(search: str = None):
     if search:
         sanitized_search = quote(search)
@@ -1000,7 +800,7 @@ async def search_gifs(search: str = None):
     else:
         raise HTTPException(status_code=400, detail="No search query provided.")
     
-@app.websocket("/user_search")
+@main_router.websocket("/user_search")
 async def user_search(websocket: WebSocket):
     # Accept user connection
     await websocket.accept()
@@ -1025,7 +825,7 @@ async def user_search(websocket: WebSocket):
         if websocket.client_state.name == "CONNECTED":
             await websocket.close()
 
-@app.websocket("/live_notifications")
+@main_router.websocket("/live_notifications")
 async def live_notifications(websocket: WebSocket):
     await websocket.accept()
 
@@ -1071,7 +871,7 @@ async def live_notifications(websocket: WebSocket):
         if user_socket in push_notification_sockets:
             push_notification_sockets.remove(user_socket)
 
-@app.get('/app_refresh')
+@main_router.get('/app_refresh')
 async def app_refresh(request: Request, last_message_id: str = None, conversation_id: str = None):
     """
     ## App Refresh
@@ -1151,6 +951,3 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
     data['friends_list'] = friends_list
 
     return data
-                
-if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8001)

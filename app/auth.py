@@ -39,3 +39,6 @@ class auth_server_interface:
 
     class InvalidToken(Exception):
         pass
+
+# Create global auth server interface
+auth_server = auth_server_interface()
