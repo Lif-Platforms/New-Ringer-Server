@@ -1,13 +1,25 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
 from ..dependencies import get_db, get_auth, get_ws
 import requests
 import asyncio
 from datetime import datetime, timezone
 from urllib.parse import quote
+import database as db
+import auth
+import websocket as ws
 
 main_router = APIRouter()
 
-async def send_push_notification(database, title: str, body: str, data: dict, account: str):
+# Access the main database instance
+database = db.database
+
+# Access the auth server instance
+auth_server = auth.auth_server
+
+# Access the websocket handler instance
+ws_handler = ws.live_updates_handler
+
+async def send_push_notification(title: str, body: str, data: dict, account: str):
     # Get push tokens from database
     push_tokens = await database.get_mobile_push_token(account)
 
@@ -31,9 +43,6 @@ async def send_push_notification(database, title: str, body: str, data: dict, ac
 @main_router.get("/get_friends")
 async def get_friends_v2(
     request: Request,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_ws)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -41,8 +50,8 @@ async def get_friends_v2(
 
     # Verify user token
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -74,8 +83,6 @@ async def get_friends_v2(
 @main_router.get("/get_friend_requests")
 async def get_friend_requests_v2(
     request: Request,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -83,8 +90,8 @@ async def get_friend_requests_v2(
 
     # Verify user token
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -99,9 +106,6 @@ async def add_friend_v2(
     request: Request,
     background_tasks: BackgroundTasks,
     recipient: str = Form(),
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_ws)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -109,8 +113,8 @@ async def add_friend_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -140,7 +144,6 @@ async def add_friend_v2(
     if not user_online:
         background_tasks.add_task(
             send_push_notification,
-            database,
             username, 
             f"{username} sent you a friend request!", 
             {}, 
@@ -154,9 +157,6 @@ async def accept_friend_request_v2(
     request: Request,
     background_tasks: BackgroundTasks,
     request_id: str = Form(),
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_db)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -164,8 +164,8 @@ async def accept_friend_request_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -202,8 +202,6 @@ async def accept_friend_request_v2(
 async def deny_friend_v2(
     request: Request,
     request_id: str = Form(),
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -211,8 +209,8 @@ async def deny_friend_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -230,8 +228,6 @@ async def deny_friend_v2(
 @main_router.get('/outgoing_friend_requests')
 async def outgoing_friend_requests(
     request: Request,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db)
 ):
     """
     ## Outgoing Friend Requests
@@ -250,8 +246,8 @@ async def outgoing_friend_requests(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -263,9 +259,6 @@ async def outgoing_friend_requests(
 @main_router.post('/send_message')
 async def send_message(
     request: Request,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_ws)
 ):
     data = await request.json()  # Parse JSON data from the request body
     username = data.get('username')
@@ -275,8 +268,8 @@ async def send_message(
 
     # Verifies token
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -306,8 +299,6 @@ async def load_messages_v2(
     request: Request,
     conversation_id: str,
     offset: int = 0,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_auth)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -318,8 +309,8 @@ async def load_messages_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -375,9 +366,6 @@ async def load_messages_v2(
 async def remove_conversation_v2(
     request: Request,
     conversation_id: str,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_ws)
 ):
     # Get username and toke from headers
     username = request.headers.get("username")
@@ -385,8 +373,8 @@ async def remove_conversation_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -427,9 +415,6 @@ async def remove_conversation_v2(
 @main_router.websocket("/live_updates")
 async def live_updates(
     websocket: WebSocket,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db),
-    ws_handler = Depends(get_ws)
 ):
     # Accept the connection
     await websocket.accept()
@@ -444,8 +429,8 @@ async def live_updates(
 
                 # Verify auth credentials with auth server
                 try:
-                    await auth_server_.verify_token(auth_details['Username'], auth_details['Token'])
-                except auth_server_.InvalidToken:
+                    await auth_server.verify_token(auth_details['Username'], auth_details['Token'])
+                except auth_server.InvalidToken:
                     await websocket.send_json({"Status": "Failed", "Reason": "INVALID_TOKEN"})
                     await websocket.close()
                     break
@@ -689,8 +674,6 @@ async def live_updates(
 async def register_push_notifications(
     request: Request,
     device_type: str,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db)
 ):
     # Get auth info
     username = request.headers.get("username")
@@ -698,8 +681,8 @@ async def register_push_notifications(
 
     # Verify auth info
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -720,8 +703,6 @@ async def register_push_notifications(
 async def unregister_push_notifications(
     request: Request,
     device_type: str,
-    auth_server_ = Depends(get_auth),
-    database = Depends(get_db)
 ):
     # Get auth info
     username = request.headers.get("username")
@@ -729,8 +710,8 @@ async def unregister_push_notifications(
 
     # Verify auth info
     try:
-        await auth_server_.verify_token(username, token)
-    except auth_server_.InvalidToken:
+        await auth_server.verify_token(username, token)
+    except auth_server.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")

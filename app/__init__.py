@@ -11,19 +11,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import routers
 
-# Init sentry
-sentry_sdk.init(
-    dsn="https://f6207dc4d931cccac8338baa0cfb4440@o4507181227769856.ingest.us.sentry.io/4508237654982656",
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for tracing.
-    traces_sample_rate=1.0,
-    _experiments={
-        # Set continuous_profiling_auto_start to True
-        # to automatically start the profiler on when
-        # possible.
-        "continuous_profiling_auto_start": True,
-    },
-)
+# TODO: Move all of this to the main.py and delete this file.
 
 # Get resources folder
 # Holds data like the default config template
@@ -66,9 +54,6 @@ with open("config.yml", "w") as config:
     new_config = yaml.safe_dump(configurations)
     config.write(new_config)
     config.close()
-
-# Set config in utility scripts
-database.set_config(configurations)
 
 # Init auth server interface
 auth_server = auth_server_interface(configurations['auth-server-url'])
