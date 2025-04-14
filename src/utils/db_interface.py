@@ -204,57 +204,61 @@ async def accept_friend(request_id: str, account: str) -> str:
 
     # Fetch request from database
     cursor.execute("SELECT * FROM friend_requests WHERE request_id = %s", (request_id,))
-    request = cursor.fetchone()
+    friend_request = cursor.fetchone()
 
     # Check if request exists
-    if not request:
+    if not friend_request:
         raise NotFound
     
     # Check if user has permission to accept this request
-    if request[2] != account:
+    if friend_request[2] != account:
         raise NoPermission
+    
+    # Extract data from request
+    request_sender = friend_request[1]
+    request_recipient = friend_request[2]
     
     # Generate a conversation id
     conversation_id = str(uuid.uuid4())
 
-    # Get sender account friends
-    cursor.execute("SELECT friends FROM users WHERE account = %s", (request[1],))
+    # Get sender account friends list
+    cursor.execute("SELECT friends FROM users WHERE account = %s", (request_sender,))
     sender_account = cursor.fetchone()
 
-    # Load sender friends
+    # Load sender friends list
     sender_friends = json.loads(sender_account[0])
 
-    # Add friend to user friends
-    sender_friends.append({"Username": request[2], "Id": conversation_id})
+    # Add recipient to sender friends list
+    sender_friends.append({"Username": request_recipient, "Id": conversation_id})
 
-    # Update friends in database
+    # Update sender friends in database
     cursor.execute("UPDATE users SET friends = %s WHERE account = %s",
-                   (json.dumps(sender_friends), request[1]))
+                   (json.dumps(sender_friends), request_sender))
     
-    # Get recipient friends
-    cursor.execute("SELECT friends FROM users WHERE account = %s", (request[2],))
+    # Get recipient friends list
+    cursor.execute("SELECT friends FROM users WHERE account = %s", (request_recipient,))
     recipient_account = cursor.fetchone()
 
-    # Load recipient friends
+    # Load recipient friends list
     recipient_friends = json.loads(recipient_account[0])
 
-    # Add friend to user friends
-    recipient_friends.append({"Username": request[1], "Id": conversation_id})
+    # Add sender to recipients friends list
+    recipient_friends.append({"Username": friend_request[1], "Id": conversation_id})
 
-    # Update friends in database
+    # Update recipient friends in database
     cursor.execute("UPDATE users SET friends = %s WHERE account = %s",
-                   (json.dumps(sender_friends), request[2]))
+                   (json.dumps(recipient_friends), friend_request[2]))
     
     # Create conversation
     cursor.execute("INSERT INTO conversations (conversation_id, members) VALUES (%s, %s)",
-                   (conversation_id, json.dumps([request[1], request[2]])))
+                   (conversation_id, json.dumps([friend_request[1], friend_request[2]])))
     
     # Remove request from database
     cursor.execute("DELETE FROM friend_requests WHERE request_id = %s", (request_id,))
     
     conn.commit()
 
-    return conversation_id, request[1]
+    return conversation_id, request_sender
 
 async def deny_friend(request_id: str, account: str) -> None:
     """
