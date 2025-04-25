@@ -1,17 +1,13 @@
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
-from ..dependencies import get_db, get_auth, get_ws
 import requests
 import asyncio
 from datetime import datetime, timezone
 from urllib.parse import quote
-import database as db
+from app.database import push_notification_tokens, friends, conversations, exceptions
 import auth
 import websocket as ws
 
 main_router = APIRouter()
-
-# Access the main database instance
-database = db.database
 
 # Access the auth server instance
 auth_server = auth.auth_server
@@ -21,7 +17,7 @@ ws_handler = ws.live_updates_handler
 
 async def send_push_notification(title: str, body: str, data: dict, account: str):
     # Get push tokens from database
-    push_tokens = await database.get_mobile_push_token(account)
+    push_tokens = await push_notification_tokens.get_mobile_push_token(account)
 
     # Check if database returned any tokens
     if len(push_tokens) > 0:
@@ -56,7 +52,7 @@ async def get_friends_v2(
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
 
-    friends_list = await database.get_friends_list(username)
+    friends_list = await friends.get_friends_list(username)
 
     # Cycle through friends and add their online status
     for friend in friends_list:
@@ -70,7 +66,7 @@ async def get_friends_v2(
         conversation_ids.append(friend['Id'])
 
     # Get last message sent in each conversation
-    last_messages = await database.fetch_last_messages(conversation_ids)
+    last_messages = await conversations.fetch_last_messages(conversation_ids)
 
     # Add messages to friends list
     for message in last_messages:
@@ -97,7 +93,7 @@ async def get_friend_requests_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Get user friends list
-    requests_list = await database.get_friend_requests(account=username)
+    requests_list = await friends.get_friend_requests(account=username)
 
     return requests_list
     
@@ -120,7 +116,7 @@ async def add_friend_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
     
     # Get user friends to prevent sending a friend request to friends
-    user_friends = await database.get_friends_list(username)
+    user_friends = await friends.get_friends_list(username)
 
     # Check if user is already friends with recipient
     for user in user_friends:
@@ -129,10 +125,10 @@ async def add_friend_v2(
 
     # Add request to database
     try:
-        await database.add_new_friend(sender=username, recipient=recipient)
-    except database.AccountNotFound:
+        await friends.add_new_friend(sender=username, recipient=recipient)
+    except exceptions.AccountNotFound:
         raise HTTPException(status_code=404, detail="User not found.")
-    except database.RequestAlreadyOutgoing:
+    except exceptions.RequestAlreadyOutgoing:
         raise HTTPException(status_code=409, detail="You already have an outgoing friend request to this user.")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -172,10 +168,10 @@ async def accept_friend_request_v2(
 
     # Accept friend request and get new conversation id as well as sender
     try:
-        conversation_id, request_sender = await database.accept_friend(request_id=request_id, account=username)
-    except database.Exceptions.NotFound:
+        conversation_id, request_sender = await friends.accept_friend(request_id=request_id, account=username)
+    except exceptions.NotFound:
         raise HTTPException(status_code=404, detail="Request not found.")
-    except database.Exceptions.NoPermission:
+    except exceptions.NoPermission:
         raise HTTPException(status_code=403, detail="You cannot accept this request.")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
