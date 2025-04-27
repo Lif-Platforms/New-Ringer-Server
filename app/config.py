@@ -49,13 +49,22 @@ def init_config():
             config.write(new_config)
             config.close()
 
-def get_config():
+def get_config(key: str = None):
     """
     Load the config file and return the configurations.
+    Parameters:
+        key (str): Optional key to retrieve a specific configuration value.
+    Returns:
+        dict or any: The configurations dictionary or a specific value if key is provided.
     """
     # Load the config file and return the configurations
     with open("config.yml", "r") as config:
         contents = config.read()
         configurations = yaml.safe_load(contents)
         config.close()
+
+    # If a key is provided, return the specific configuration value
+    if key is not None:
+        return configurations.get(key, None)
+    
     return configurations

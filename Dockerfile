@@ -5,7 +5,7 @@ FROM python:3.9
 WORKDIR /app
 
 # Copy everything from the src directory into the /app directory in the container
-COPY src/ /app/
+COPY app/ /app/
 
 # Copy requirements.txt to /app dir
 COPY requirements.txt /app/

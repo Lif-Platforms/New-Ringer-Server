@@ -3,9 +3,18 @@ import requests
 import asyncio
 from datetime import datetime, timezone
 from urllib.parse import quote
-from app.database import push_notification_tokens, friends, conversations, exceptions
+from app.database import (
+    push_notification_tokens,
+    friends, 
+    conversations,
+    exceptions,
+    messages,
+    users,
+)
+from pysafebrowsing import SafeBrowsing
 import auth
 import websocket as ws
+import app.config as config
 
 main_router = APIRouter()
 
@@ -213,10 +222,10 @@ async def deny_friend_v2(
 
     # Deny friend request
     try:
-        await database.deny_friend(request_id=request_id, account=username)
-    except database.NotFound:
+        await friends.deny_friend(request_id=request_id, account=username)
+    except exceptions.NotFound:
         raise HTTPException(status_code=404, detail="Request not found.")
-    except database.NoPermission:
+    except exceptions.NoPermission:
         raise HTTPException(status_code=403, detail="You cannot deny this request.")
 
     return "Request Denied!"
@@ -248,7 +257,7 @@ async def outgoing_friend_requests(
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
 
-    requests_list = await database.get_outgoing_friend_requests(account=username)
+    requests_list = await friends.get_outgoing_friend_requests(account=username)
 
     return requests_list
 
@@ -270,10 +279,10 @@ async def send_message(
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
 
-    await database.send_message(username, conversation_id, message)
+    await messages.send_message(username, conversation_id, message)
 
     # Get conversation members
-    conversation_members = await database.get_members(conversation_id)
+    conversation_members = await conversations.get_members(conversation_id)
 
     # Send message to conversation members
     await ws_handler.send_message(
@@ -313,8 +322,8 @@ async def load_messages_v2(
 
     try:
         # Get all members of conversation
-        members = await database.get_members(conversation_id)
-    except database.Exceptions.ConversationNotFound:
+        members = await conversations.get_members(conversation_id)
+    except exceptions.ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation Not Found")
     except:
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -323,12 +332,12 @@ async def load_messages_v2(
     if username in members:
         try:
             # Get all messages from database
-            messages, unread_messages = await database.get_messages(
+            messages_, unread_messages = await messages.get_messages(
                 conversation_id=conversation_id,
                 offset=offset,
                 account=username
             )
-            messages.reverse()
+            messages_.reverse()
 
             # Set conversation name based on who is loading it
             if members[0] == username:
@@ -345,7 +354,7 @@ async def load_messages_v2(
             }
 
             # Mark messages as viewed
-            await database.mark_message_viewed_bulk(conversation_name, conversation_id, offset)
+            await messages.mark_message_viewed_bulk(conversation_name, conversation_id, offset)
 
             # Check what route version the client requested
             if route_version == "2.0":
@@ -376,10 +385,10 @@ async def remove_conversation_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Get conversation members to notify later
-    members = await database.get_members(conversation_id)
+    members = await conversations.get_members(conversation_id)
 
     # Use database interface to remove conversation
-    remove_status = await database.remove_conversation(conversation_id, username)
+    remove_status = await conversations.remove_conversation(conversation_id, username)
 
     # Check the status of the operation
     if remove_status == "OK":
@@ -446,13 +455,13 @@ async def live_updates(
 
                 # Get user friends from database
                 # This will be used to send a presence update to all friends
-                friends = await database.get_friends_list(username)
+                friends_ = await friends.get_friends_list(username)
 
                 # Create user list based on friends list
                 # This essentially removes the conversation id from the data and just has a list of usernames
                 notify_users = []
 
-                for friend in friends:
+                for friend in friends_:
                     notify_users.append(friend['Username'])
 
                 # Send presence update to all online friends
@@ -485,7 +494,7 @@ async def live_updates(
                             continue
 
                     # Get conversation members to ensure authorization
-                    members = await database.get_members(data["ConversationId"])
+                    members = await conversations.get_members(data["ConversationId"])
 
                     # Check if user is a member of the conversation
                     if username in members:
@@ -506,8 +515,8 @@ async def live_updates(
                                     message_type = "GIF"
                                     gif_url = data['GIF_URL']
 
-                            message_id = await database.send_message(username, data["ConversationId"], data["Message"], self_destruct, message_type, gif_url)
-                        except database.Exceptions.ConversationNotFound:
+                            message_id = await messages.send_message(username, data["ConversationId"], data["Message"], self_destruct, message_type, gif_url)
+                        except exceptions.ConversationNotFound:
                             await websocket.send_json({
                                 "ResponseType": "ERROR",
                                 "ErrorCode": "NOT_FOUND",
@@ -584,7 +593,7 @@ async def live_updates(
                 
                 elif data["MessageType"] == "USER_TYPING":
                     # Get conversation members
-                    members = await database.get_members(data['ConversationId'])
+                    members = await conversations.get_members(data['ConversationId'])
 
                     # Send typing status to conversation members
                     await ws_handler.send_message(
@@ -600,7 +609,7 @@ async def live_updates(
                     conversation_id = data['Conversation_Id']
 
                     # Get conversation members
-                    members = await database.get_members(conversation_id)
+                    members = await conversations.get_members(conversation_id)
 
                     # Ensure user is a member of the conversation
                     if username not in members:
@@ -612,11 +621,11 @@ async def live_updates(
                         continue
 
                     # Get message from database and check to ensure the viewer is not the author
-                    message = await database.get_message(data['Message_Id'])
+                    message = await messages.get_message(data['Message_Id'])
 
                     if message:
                         if message['author'] != username:
-                            await database.view_message(data['Message_Id'])
+                            await messages.view_message(data['Message_Id'])
 
                             await websocket.send_json({"ResponseType": "OK"})
                         else:
@@ -648,12 +657,12 @@ async def live_updates(
             # If user is not online, send a presence update to all friends reflecting this change
             if not user_online:
                 # Get users friends
-                friends = await database.get_friends_list(username)
+                friends_ = await friends.get_friends_list(username)
 
                 # Make a new list of friends without the conversation ids
                 notify_users = []
 
-                for friend in friends:
+                for friend in friends_:
                     notify_users.append(friend['Username'])
 
                 # Send presence update to friends
@@ -689,7 +698,7 @@ async def register_push_notifications(
         body = await request.json()
         push_token = body.get("push-token")
 
-        await database.add_mobile_notifications_device(push_token, username)
+        await push_notification_tokens.add_mobile_notifications_device(push_token, username)
 
         return "Ok"
     else:
@@ -718,7 +727,7 @@ async def unregister_push_notifications(
         body = await request.json()
         push_token = body.get("push-token")
 
-        await database.remove_mobile_notifications_device(push_token)
+        await push_notification_tokens.remove_mobile_notifications_device(push_token)
 
         return "Ok"
     else:
@@ -727,7 +736,7 @@ async def unregister_push_notifications(
 @main_router.post("/link_safety_check")
 async def link_safety_check(request: Request):
     # Load API key from config
-    api_key = configurations['safe-browsing-api-key']
+    api_key = config.get_config('safe-browsing-api-key')
 
     # Initialize the SafeBrowsing client
     safe_browsing = SafeBrowsing(api_key)
@@ -749,8 +758,13 @@ async def link_safety_check(request: Request):
 @main_router.get("/search_gifs")
 async def search_gifs(search: str = None):
     if search:
+        # Salinize the search query to prevent issues with special characters
         sanitized_search = quote(search)
-        url = f"https://api.giphy.com/v1/gifs/search?api_key={configurations['giphy-api-key']}&q={sanitized_search}&limit=20"
+
+        # Load Giphy API key from config
+        giphy_api_key = config.get_config('giphy-api-key')
+
+        url = f"https://api.giphy.com/v1/gifs/search?api_key={giphy_api_key}&q={sanitized_search}&limit=20"
         response = requests.get(url, timeout=20)
         return response.json()
     else:
@@ -768,7 +782,7 @@ async def user_search(
             data = await websocket.receive_json()
 
             if "user" in data:
-                results = await database.search_users(data['user'])
+                results = await users.search_users(data['user'])
 
                 await websocket.send_json(results)
             else:
@@ -862,15 +876,15 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
         if conversation_id:
             # Get conversation members
             try:
-                members = await database.get_members(conversation_id)
-            except ConversationNotFound:
+                members = await conversations.get_members(conversation_id)
+            except exceptions.ConversationNotFound:
                 raise HTTPException(status_code=404, detail="Conversation not found")
 
             if username not in members:
                 raise HTTPException(status_code=403, detail="You are not a member of this conversation")
 
             # Get all messages after the last message id
-            results = await database.get_messages_after(
+            results = await messages.get_messages_after(
                 message_id=last_message_id,
                 conversation_id=conversation_id,
             )
@@ -882,10 +896,10 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
     friends_presence = []
     
     # Get friends of user
-    friends = await database.get_friends_list(username)
+    friends_ = await friends.get_friends_list(username)
 
     # Add all online friends to list
-    for friend in friends:
+    for friend in friends_:
         is_online = await ws_handler.get_presence(friend['Username'])
         friends_presence.append({'username': friend['Username'], 'online': is_online})
 
@@ -899,13 +913,13 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
         conversation_ids.append(friend['Id'])
 
     # Get last sent message from each conversation
-    last_messages = await database.fetch_last_messages(conversation_ids)
+    last_messages = await conversations.fetch_last_messages(conversation_ids)
 
     # Add last sent messages to data
     data['last_sent_messages'] = last_messages
 
     # Get list of friends and add it to data
-    friends_list = await database.get_friends_list(username)
+    friends_list = await friends.get_friends_list(username)
     data['friends_list'] = friends_list
 
     return data
