@@ -3,7 +3,7 @@ import requests
 import asyncio
 from datetime import datetime, timezone
 from urllib.parse import quote
-from app.database import (
+from database import (
     push_notification_tokens,
     friends, 
     conversations,
@@ -13,16 +13,13 @@ from app.database import (
 )
 from pysafebrowsing import SafeBrowsing
 import auth
-import websocket as ws
 import app.config as config
+from websocket import live_updates, push_notifications
 
 main_router = APIRouter()
 
 # Access the auth server instance
 auth_server = auth.auth_server
-
-# Access the websocket handler instance
-ws_handler = ws.live_updates_handler
 
 async def send_push_notification(title: str, body: str, data: dict, account: str):
     # Get push tokens from database
@@ -65,7 +62,7 @@ async def get_friends_v2(
 
     # Cycle through friends and add their online status
     for friend in friends_list:
-        friend_online = await ws_handler.get_presence(friend['Username'])
+        friend_online = await live_updates.get_presence(friend['Username'])
         friend['Online'] = friend_online
 
     conversation_ids = []
@@ -143,7 +140,7 @@ async def add_friend_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Check if user is online
-    user_online = await ws_handler.get_presence(recipient)
+    user_online = await live_updates.get_presence(recipient)
 
     # Checks if recipient is online. If not, a push notification will be sent to their devices
     if not user_online:
@@ -186,7 +183,7 @@ async def accept_friend_request_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Notify sender request was accepted (if online)
-    await ws_handler.send_message(
+    await live_updates.send_message(
         users=request_sender,
         message={
             "Type": "FRIEND_REQUEST_ACCEPT",
@@ -196,7 +193,7 @@ async def accept_friend_request_v2(
     )
 
     # Checks if recipient is online. If not, a push notification will be sent to their devices
-    user_online = await ws_handler.get_presence(request_sender)
+    user_online = await live_updates.get_presence(request_sender)
 
     if not user_online:
         background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, request_sender)
@@ -285,7 +282,7 @@ async def send_message(
     conversation_members = await conversations.get_members(conversation_id)
 
     # Send message to conversation members
-    await ws_handler.send_message(
+    await live_updates.send_message(
         users=conversation_members,
         message={
             "Type": "MESSAGE_UPDATE",
@@ -401,7 +398,7 @@ async def remove_conversation_v2(
                 notify_users.append(member)
 
         # Send alert to members that conversation was deleted
-        await ws_handler.send_message(
+        await live_updates.send_message(
             users=notify_users,
             message={
                 "Type": "REMOVE_CONVERSATION",
@@ -418,7 +415,7 @@ async def remove_conversation_v2(
         raise HTTPException(status_code=500, detail="Internal Server Error!")
 
 @main_router.websocket("/live_updates")
-async def live_updates(
+async def live_updates_route(
     websocket: WebSocket,
 ):
     # Accept the connection
@@ -451,7 +448,7 @@ async def live_updates(
                 username = auth_details['Username']
 
                 # Add user to connected sockets
-                await ws_handler.connect_user(websocket, username)
+                await live_updates.connect_user(websocket, username)
 
                 # Get user friends from database
                 # This will be used to send a presence update to all friends
@@ -465,7 +462,7 @@ async def live_updates(
                     notify_users.append(friend['Username'])
 
                 # Send presence update to all online friends
-                await ws_handler.send_message(
+                await live_updates.send_message(
                     users=notify_users,
                     message={"Type": "USER_STATUS_UPDATE", "Online": True, "User": username}
                 )
@@ -539,7 +536,7 @@ async def live_updates(
                         formatted_utc_time = current_utc_time.strftime("%Y-%m-%d %H:%M:%S")
 
                         # Notify conversation members that the message was sent
-                        await ws_handler.send_message(
+                        await live_updates.send_message(
                             users=members,
                             message={
                                 "Type": "MESSAGE_UPDATE",
@@ -563,7 +560,7 @@ async def live_updates(
                                 continue
 
                             # Get online status of member
-                            member_online = await ws_handler.get_presence(member)
+                            member_online = await live_updates.get_presence(member)
                             
                             # If user is not online then send a push notification to their devices
                             if not member_online:
@@ -575,15 +572,15 @@ async def live_updates(
 
                                 # If user is connected to notifications websocket service
                                 # a notification will be delivered that way
-                                for user in push_notification_sockets:
-                                    if user['user'] == member:
-                                        await user['socket'].send_json({
-                                            "responseType": "notification",
-                                            "title": username,
-                                            "body": data['Message'],
-                                            "conversation_id": data['ConversationId']
-                                        })
-
+                                push_notifications.send_notification(
+                                    users=[member],
+                                    message={
+                                        "responseType": "notification",
+                                        "title": username,
+                                        "body": data['Message'],
+                                        "conversation_id": data['ConversationId']
+                                    }
+                                )
                     else:
                         await websocket.send_json({
                             "ResponseType": "ERROR",
@@ -596,7 +593,7 @@ async def live_updates(
                     members = await conversations.get_members(data['ConversationId'])
 
                     # Send typing status to conversation members
-                    await ws_handler.send_message(
+                    await live_updates.send_message(
                         users=members,
                         message={
                             "Type": "USER_TYPING", 
@@ -649,10 +646,10 @@ async def live_updates(
     except WebSocketDisconnect:
         if authenticated:
             # Remove user from notification sockets
-            await ws_handler.disconnect_user(websocket)
+            await live_updates.disconnect_user(websocket)
 
             # Check if user is still online on another device
-            user_online = await ws_handler.get_presence(username)
+            user_online = await live_updates.get_presence(username)
 
             # If user is not online, send a presence update to all friends reflecting this change
             if not user_online:
@@ -666,7 +663,7 @@ async def live_updates(
                     notify_users.append(friend['Username'])
 
                 # Send presence update to friends
-                await ws_handler.send_message(
+                await live_updates.send_message(
                     users=notify_users,
                     message={
                         "Type": "USER_STATUS_UPDATE",
@@ -823,25 +820,21 @@ async def live_notifications(websocket: WebSocket):
                         continue
 
                     # Add user to push notifications sockets
-                    push_notification_sockets.append({"user": credentials['username'], "socket": websocket})
+                    push_notifications.connect_user(websocket, credentials['username'])
 
             elif authenticated and "credentials" not in data:
                 await websocket.send_json({"responseType": "ERROR", "errorCode": "BAD_REQUEST"})
             else:
                 await websocket.send_json({"responseType": "ERROR", "errorCode": "NOT_AUTHENTICATED"})
     except WebSocketDisconnect:
-        print("Client disconnected")
-
         # Remove user from notification sockets
-        if user_socket in push_notification_sockets:
-            push_notification_sockets.remove(user_socket)
+        push_notifications.disconnect_user(user_socket)
     finally:
         if websocket.client_state.name == "CONNECTED":
             await websocket.close()
 
         # Remove user from notification sockets
-        if user_socket in push_notification_sockets:
-            push_notification_sockets.remove(user_socket)
+        push_notifications.disconnect_user(user_socket)
 
 @main_router.get('/app_refresh')
 async def app_refresh(request: Request, last_message_id: str = None, conversation_id: str = None):
@@ -900,7 +893,7 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
 
     # Add all online friends to list
     for friend in friends_:
-        is_online = await ws_handler.get_presence(friend['Username'])
+        is_online = await live_updates.get_presence(friend['Username'])
         friends_presence.append({'username': friend['Username'], 'online': is_online})
 
     # Add friend presence to list

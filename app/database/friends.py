@@ -1,4 +1,4 @@
-from connections import get_connection
+from database.connections import get_connection
 import json
 import uuid
 import datetime

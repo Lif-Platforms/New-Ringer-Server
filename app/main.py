@@ -1,8 +1,24 @@
 import database as database
 import uvicorn
-import app
 import sentry_sdk
 import config as cf
+from __version__ import version
+import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import asyncio
+from websocket import live_updates
+from routers import legacy
+
+# Get run environment
+__env__= os.getenv('RUN_ENVIRONMENT')
+
+# Determine whether or not to show the documentation
+if __env__ == "PRODUCTION":
+    docs_url = None
+else:
+    docs_url = '/docs'
 
 # Init sentry
 sentry_sdk.init(
@@ -18,17 +34,62 @@ sentry_sdk.init(
     },
 )
 
+async def destruct_messages():
+    while True:
+        # Get delete messages
+        messages = await database.get_delete_messages()
+        
+        # Notify clients to delete the message
+        for message in messages:
+            members = await database.get_members(message['conversation_id'])
+
+            await live_updates.send_message(
+                users=members,
+                message={
+                    "Type": "DELETE_MESSAGE",
+                    "Conversation_Id": message['conversation_id'],
+                    "Message_Id": message['message_id']
+                }
+            )
+
+        await database.destruct_messages()
+
+        await asyncio.sleep(10)
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Code to run at startup
+    task = asyncio.create_task(destruct_messages())
+    yield
+    # Code to run at shutdown
+    task.cancel()
+
+
+# Create the FastAPI instance
+app = FastAPI(
+    title="Ringer Server",
+    description="Official server for the Ringer messaging app.",
+    version=version,
+    lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=None
+)
+
+# Allow Cross-Origin Resource Sharing (CORS) for all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include all routers in app
+app.include_router(router=legacy.main_router)
+
 # Init config
-config = cf.Config()
-config.init_config()
+cf.init_config()
 
-# Create instance of live updates ws handler
-live_ws_conn_handler = live_ws_handler()
-
-# List of users connected to the push-notifications service
-push_notification_sockets = []
-
-@app.application.get('/')
+@app.get('/')
 async def home():
     return {"name": "Ringer Server", "version": version}
                 
