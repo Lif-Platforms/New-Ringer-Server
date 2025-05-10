@@ -1,4 +1,4 @@
-from database.connections import get_connection
+from app.database.connections import get_connection
 
 async def add_mobile_notifications_device(push_token: str, account: str) -> None:
     """

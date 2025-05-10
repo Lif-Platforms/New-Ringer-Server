@@ -1,6 +1,6 @@
-from database.connections import get_connection
+from app.database.connections import get_connection
 import uuid
-import database.exceptions as exceptions
+import app.database.exceptions as exceptions
 
 async def send_message(
     author,

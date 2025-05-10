@@ -1,15 +1,14 @@
-import database as database
-import uvicorn
+import app.database as database
 import sentry_sdk
-import config as cf
-from __version__ import version
+import app.config as cf
+from app.__version__ import version
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
-from websocket import live_updates
-from routers import legacy
+from app.websocket import live_updates
+from app.routers import legacy, friends, friend_requests
 
 # Get run environment
 __env__= os.getenv('RUN_ENVIRONMENT')
@@ -85,6 +84,8 @@ app.add_middleware(
 
 # Include all routers in app
 app.include_router(router=legacy.main_router)
+app.include_router(router=friends.router, prefix="/friends")
+app.include_router(router=friend_requests.router, prefix="/friend_requests")
 
 # Init config
 cf.init_config()
@@ -92,6 +93,3 @@ cf.init_config()
 @app.get('/')
 async def home():
     return {"name": "Ringer Server", "version": version}
-                
-if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8001)

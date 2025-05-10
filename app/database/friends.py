@@ -1,8 +1,8 @@
-from database.connections import get_connection
+from app.database.connections import get_connection
 import json
 import uuid
 import datetime
-import exceptions
+import app.database.exceptions as exceptions
 
 async def get_friends_list(account: str) -> list:
     """

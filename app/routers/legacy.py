@@ -1,46 +1,32 @@
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Form, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Request,
+    HTTPException,
+    BackgroundTasks,
+    Form,
+    WebSocket,
+    WebSocketDisconnect
+)
 import requests
 import asyncio
 from datetime import datetime, timezone
 from urllib.parse import quote
-from database import (
-    push_notification_tokens,
+from app.database import (
     friends, 
     conversations,
     exceptions,
     messages,
     users,
+    connections,
+    push_notification_tokens
 )
 from pysafebrowsing import SafeBrowsing
-import auth
+import app.auth as auth
 import app.config as config
-from websocket import live_updates, push_notifications
+from app.websocket import live_updates, push_notifications
+from app.push_notifications import send_push_notification
 
 main_router = APIRouter()
-
-# Access the auth server instance
-auth_server = auth.auth_server
-
-async def send_push_notification(title: str, body: str, data: dict, account: str):
-    # Get push tokens from database
-    push_tokens = await push_notification_tokens.get_mobile_push_token(account)
-
-    # Check if database returned any tokens
-    if len(push_tokens) > 0:
-        # Create messages to send to clients
-        messages = []
-
-        for token in push_tokens:
-            messages.append({
-                'to': token,
-                'title': title,
-                'body': body,
-                'data': data,
-                'sound': 'default'
-            })
-        
-        # Send notifications to devices
-        requests.post("https://exp.host/--/api/v2/push/send", json=messages, timeout=10)
        
 @main_router.get("/get_friends")
 async def get_friends_v2(
@@ -52,8 +38,8 @@ async def get_friends_v2(
 
     # Verify user token
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -92,8 +78,8 @@ async def get_friend_requests_v2(
 
     # Verify user token
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -115,8 +101,8 @@ async def add_friend_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -166,8 +152,8 @@ async def accept_friend_request_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -211,8 +197,8 @@ async def deny_friend_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -248,8 +234,8 @@ async def outgoing_friend_requests(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -270,8 +256,8 @@ async def send_message(
 
     # Verifies token
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -311,8 +297,8 @@ async def load_messages_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -347,7 +333,7 @@ async def load_messages_v2(
                 "conversation_name": conversation_name,
                 "conversation_id": conversation_id,
                 "unread_messages": unread_messages,
-                "messages": messages
+                "messages": messages_
             }
 
             # Mark messages as viewed
@@ -357,7 +343,7 @@ async def load_messages_v2(
             if route_version == "2.0":
                 return data
             else:
-                return messages
+                return messages_
         except Exception as e:
             print(e)
             raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -375,8 +361,8 @@ async def remove_conversation_v2(
 
     # Verifies token with auth server
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -431,8 +417,8 @@ async def live_updates_route(
 
                 # Verify auth credentials with auth server
                 try:
-                    await auth_server.verify_token(auth_details['Username'], auth_details['Token'])
-                except auth_server.InvalidToken:
+                    await auth.verify_token(auth_details['Username'], auth_details['Token'])
+                except auth.InvalidToken:
                     await websocket.send_json({"Status": "Failed", "Reason": "INVALID_TOKEN"})
                     await websocket.close()
                     break
@@ -572,7 +558,7 @@ async def live_updates_route(
 
                                 # If user is connected to notifications websocket service
                                 # a notification will be delivered that way
-                                push_notifications.send_notification(
+                                await push_notifications.send_notification(
                                     users=[member],
                                     message={
                                         "responseType": "notification",
@@ -683,8 +669,8 @@ async def register_push_notifications(
 
     # Verify auth info
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -712,8 +698,8 @@ async def unregister_push_notifications(
 
     # Verify auth info
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")
@@ -774,12 +760,17 @@ async def user_search(
     # Accept user connection
     await websocket.accept()
 
+    # Create a database connection for user search
+    # This connection will be present for the duration of the websocket connection
+    # This is done to avoid creating a new connection for each request
+    db_conn = connections.get_connection()
+
     try:
         while True:
             data = await websocket.receive_json()
 
             if "user" in data:
-                results = await users.search_users(data['user'])
+                results = await users.search_users(data['user'], db_conn)
 
                 await websocket.send_json(results)
             else:
@@ -789,10 +780,13 @@ async def user_search(
                     "detail": "Data must contain a 'user' key."
                 })
     except WebSocketDisconnect:
-        print("Client disconnected")
+        # Close the database connection when the websocket is disconnected
+        db_conn.close()
     finally:
         if websocket.client_state.name == "CONNECTED":
             await websocket.close()
+        # Close the database connection when the websocket is disconnected
+        db_conn.close()
 
 @main_router.websocket("/live_notifications")
 async def live_notifications(websocket: WebSocket):
@@ -811,8 +805,8 @@ async def live_notifications(websocket: WebSocket):
                 if "username" in credentials and "token" in credentials:
                     # Verify credentials with auth server
                     try:
-                        await auth_server.verify_token(credentials['username'], credentials['token'])
-                    except auth_server.InvalidToken:
+                        await auth.verify_token(credentials['username'], credentials['token'])
+                    except auth.InvalidToken:
                         await websocket.send_json({"responseType": "authSuccess", "detail": "Authentication was successful"})
                         continue
                     except:
@@ -857,8 +851,8 @@ async def app_refresh(request: Request, last_message_id: str = None, conversatio
 
     # Verify credentials
     try:
-        await auth_server.verify_token(username, token)
-    except auth_server.InvalidToken:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
         raise HTTPException(status_code=401, detail="Invalid token!")
     except:
         raise HTTPException(status_code=500, detail="Internal server error.")

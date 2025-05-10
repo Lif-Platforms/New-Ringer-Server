@@ -1,5 +1,5 @@
-from connections import get_connection
-import exceptions
+from app.database.connections import get_connection
+import app.database.exceptions as exceptions
 import json
 
 async def get_members(conversation_id: str) -> list:

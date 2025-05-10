@@ -12,9 +12,6 @@ async def connect_user(websocket: WebSocket, user: str) -> None:
     Returns:
         None
     """
-    # Accept the WebSocket connection
-    await websocket.accept()
-
     # Add the new connection to the list
     connections.append({'user': user, 'websocket': websocket})
 

@@ -1,6 +1,6 @@
 import mysql.connector
 from mysql.connector import ClientFlag
-from config import get_config
+from app.config import get_config
 
 def get_connection():
     """
