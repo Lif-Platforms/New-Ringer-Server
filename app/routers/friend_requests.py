@@ -7,9 +7,9 @@ from app.push_notifications import send_push_notification
 router = APIRouter()
 
 @router.get("/v1/get_requests")
-async def get_friend_requests_v2(request: Request):
+async def get_friend_requests(request: Request):
     """
-    # Get Friend Requests (v1)
+    # Get Friend Requests
     Get a list of friend requests for the user.
 
     ## Request Headers
@@ -39,6 +39,20 @@ async def get_friend_requests_v2(request: Request):
 
 @router.post("/v1/accept_request")
 async def accept_friend_request(request: Request, background_tasks: BackgroundTasks):
+    """
+    ## Accept Friend Request
+    Accept a friend request and create a conversation.
+
+    ### Headers:
+    - **username (str):** The username of the user.
+    - **token (str):** The user's token.
+
+    ### Body:
+    - **request_id (str):** The ID of the friend request to accept.
+
+    ### Returns:
+    - **JSON:** Data associated with the new conversation.
+    """
     # Get username and toke from headers
     username = request.headers.get("username")
     token = request.headers.get("token")
@@ -122,3 +136,32 @@ async def deny_friend_request(request: Request):
         raise HTTPException(status_code=403, detail="You cannot deny this request.")
 
     return "Request Denied!"
+
+@router.get('/v1/outgoing_requests')
+async def outgoing_friend_requests(request: Request):
+    """
+    ## Outgoing Friend Requests
+    Get a list of outgoing friend requests for the user.
+
+    ### Headers:
+    - **username (str):** The username of the user.
+    - **token (str):** The user's token.
+
+    ### Returns:
+    - **JSON:** A list of outgoing friend requests.
+    """
+    # Get username and toke from headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Verifies token with auth server
+    try:
+        await auth.verify_token(username, token)
+    except auth.InvalidToken:
+        raise HTTPException(status_code=401, detail="Invalid token!")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
+    requests_list = await friends.get_outgoing_friend_requests(account=username)
+
+    return requests_list

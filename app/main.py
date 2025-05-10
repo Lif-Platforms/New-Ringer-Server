@@ -8,7 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 from app.websocket import live_updates
-from app.routers import legacy, friends, friend_requests
+from app.routers import (
+    legacy,
+    friends,
+    friend_requests,
+    notifications,
+    gifs,
+    conversations,
+    messages,
+)
 
 # Get run environment
 __env__= os.getenv('RUN_ENVIRONMENT')
@@ -86,6 +94,10 @@ app.add_middleware(
 app.include_router(router=legacy.main_router)
 app.include_router(router=friends.router, prefix="/friends")
 app.include_router(router=friend_requests.router, prefix="/friend_requests")
+app.include_router(router=notifications.router, prefix="/notifications")
+app.include_router(router=gifs.router, prefix="/gifs")
+app.include_router(router=conversations.router, prefix="/conversations")
+app.include_router(router=messages.router, prefix="/messages")
 
 # Init config
 cf.init_config()
