@@ -91,13 +91,13 @@ app.add_middleware(
 )
 
 # Include all routers in app
-app.include_router(router=legacy.main_router)
-app.include_router(router=friends.router, prefix="/friends")
-app.include_router(router=friend_requests.router, prefix="/friend_requests")
-app.include_router(router=notifications.router, prefix="/notifications")
-app.include_router(router=gifs.router, prefix="/gifs")
-app.include_router(router=conversations.router, prefix="/conversations")
-app.include_router(router=messages.router, prefix="/messages")
+app.include_router(router=legacy.main_router, tags=["Legacy"])
+app.include_router(router=friends.router, prefix="/friends", tags=["Friends"])
+app.include_router(router=friend_requests.router, prefix="/friend_requests", tags=["Friend Requests"])
+app.include_router(router=notifications.router, prefix="/notifications", tags=["Notifications"])
+app.include_router(router=gifs.router, prefix="/gifs", tags=["GIFs"])
+app.include_router(router=conversations.router, prefix="/conversations", tags=["Conversations"])
+app.include_router(router=messages.router, prefix="/messages", tags=["Messages"])
 
 # Init config
 cf.init_config()

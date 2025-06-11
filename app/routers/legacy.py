@@ -368,37 +368,45 @@ async def remove_conversation_v2(
         raise HTTPException(status_code=500, detail="Internal server error.")
 
     # Get conversation members to notify later
-    members = await conversations.get_members(conversation_id)
+    try:
+        members = await conversations.get_members(conversation_id)
+    except exceptions.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    except:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+    # Check if user is a member of the conversation
+    if username not in members:
+        raise HTTPException(status_code=403, detail="You are not a member of this conversation")
 
     # Use database interface to remove conversation
-    remove_status = await conversations.remove_conversation(conversation_id, username)
+    try:
+        await conversations.remove_conversation(conversation_id, username)
+    except exceptions.ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    except exceptions.NoPermission:
+        raise HTTPException(status_code=403, detail="You do not have permission to remove this conversation")
+    except:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-    # Check the status of the operation
-    if remove_status == "OK":
-        # Create a list of users to notify based on conversation members
-        # This also excludes the user who made the request
-        notify_users = []
+    # Create a list of users to notify based on conversation members
+    # This also excludes the user who made the request
+    notify_users = []
 
-        for member in members:
-            if member != username:
-                notify_users.append(member)
+    for member in members:
+        if member != username:
+            notify_users.append(member)
 
-        # Send alert to members that conversation was deleted
-        await live_updates.send_message(
-            users=notify_users,
-            message={
-                "Type": "REMOVE_CONVERSATION",
-                "Id": conversation_id
-            }
-        )
+    # Send alert to members that conversation was deleted
+    await live_updates.send_message(
+        users=notify_users,
+        message={
+            "Type": "REMOVE_CONVERSATION",
+            "Id": conversation_id
+        }
+    )
 
-        return "Conversation Removed!"
-    
-    elif remove_status == "NO_PERMISSION":
-        raise HTTPException(status_code=403, detail="No Permission!")
-    
-    else:
-        raise HTTPException(status_code=500, detail="Internal Server Error!")
+    return "Conversation Removed!"
 
 @main_router.websocket("/live_updates")
 async def live_updates_route(

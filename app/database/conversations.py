@@ -20,7 +20,7 @@ async def get_members(conversation_id: str) -> list:
     members = json.loads(conversation[2])
     return members
 
-async def remove_conversation(self, conversation_id: str, username: str) -> None:
+async def remove_conversation(conversation_id: str, username: str) -> None:
     # Create/ensure database connection
     conn = get_connection()
     cursor = conn.cursor()
@@ -44,11 +44,11 @@ async def remove_conversation(self, conversation_id: str, username: str) -> None
     
     # Delete conversation
     cursor.execute("DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,))
-    self.conn.commit()
+    conn.commit()
 
     # Delete conversation messages
     cursor.execute("DELETE FROM messages WHERE conversation_id = %s", (conversation_id,))
-    self.conn.commit()
+    conn.commit()
 
     # For each member, remove conversation from friends
     for member in conversation_members:
@@ -69,7 +69,7 @@ async def remove_conversation(self, conversation_id: str, username: str) -> None
 
                 # Update member friends
                 cursor.execute("UPDATE users SET friends = %s WHERE account = %s", (json.dumps(member_friends), member))
-                self.conn.commit()
+                conn.commit()
             else:
                 index += 1
 
