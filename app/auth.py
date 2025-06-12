@@ -62,7 +62,7 @@ def useAuth(request: Request) -> tuple[str, str]:
             status_code=400,
             detail="\"username\" and \"token\" headers are required."
         )
-    
+
     # Create form data for request
     request_body, content_type = encode_multipart_formdata([
         ('username', username),

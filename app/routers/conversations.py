@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
-import app.auth as auth
+from fastapi import APIRouter, HTTPException, Depends
 from app.database import conversations
 from app.websocket import live_updates
 from app.auth import useAuth
@@ -8,7 +7,7 @@ router = APIRouter()
 
 @router.delete("/v1/remove/{conversation_id}")
 async def remove_conversation_v2(conversation_id: str, account = Depends(useAuth)):
-    username = account[0]    
+    username = account[0]
 
     # Get conversation members to notify later
     members = await conversations.get_members(conversation_id)

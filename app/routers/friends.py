@@ -1,5 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
-import app.auth as auth
+from fastapi import APIRouter, Depends
 from app.database import friends, conversations
 from app.websocket import live_updates
 from app.auth import useAuth
