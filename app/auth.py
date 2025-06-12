@@ -1,6 +1,7 @@
 import requests
 from urllib3 import encode_multipart_formdata
 import app.config as config
+from fastapi import Request, HTTPException
 
 async def verify_token(username: str, token: str):
     """
@@ -39,3 +40,62 @@ async def verify_token(username: str, token: str):
 
 class InvalidToken(Exception):
     pass
+
+def useAuth(request: Request) -> tuple[str, str]:
+    """
+    Verify user credentials from request data.
+    Args:
+        request (fastapi.Request): The FastAPI request data.
+    Returns:
+        username,token (str,str): Auth details for the account.
+    Raises:
+        fastapi.HTTPException: Problem with the authentication.
+        requests.exceptions.RequestException: If there is an issue with the HTTP request.
+    """
+    # Get auth headers
+    username = request.headers.get("username")
+    token = request.headers.get("token")
+
+    # Ensure both auth headers exist
+    if not username or not token:
+        raise HTTPException(
+            status_code=400,
+            detail="\"username\" and \"token\" headers are required."
+        )
+
+    # Create form data for request
+    request_body, content_type = encode_multipart_formdata([
+        ('username', username),
+        ('token', token),
+    ])
+
+    # Get auth server url from config
+    auth_server_url = config.get_config('auth-server-url')
+
+    # Make auth request to server
+    response = requests.post(
+        url=f"{auth_server_url}/auth/verify_token",
+        headers={'Content-Type': content_type},
+        data=request_body,
+        timeout=10
+    )
+
+    # Check auth response
+    status = response.status_code
+    if status == 200:
+        return username, token
+    elif status == 401:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or token."
+        )
+    elif status == 403:
+        raise HTTPException(
+            status_code=403,
+            detail="Account suspended."
+        )
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error."
+        )

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, HTTPException
-import app.auth as auth
+from fastapi import APIRouter, Request, HTTPException, Depends
 from app.database import conversations, messages, exceptions
+from app.auth import useAuth
 
 router = APIRouter()
 
@@ -9,21 +9,10 @@ async def load_messages_v2(
     request: Request,
     conversation_id: str,
     offset: int = 0,
+    account = Depends(useAuth),
 ):
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Get api route version from headers
+    username = account[0]
     route_version = request.headers.get("version")
-
-    # Verifies token with auth server
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
 
     try:
         # Get all members of conversation

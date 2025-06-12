@@ -1,12 +1,12 @@
-from fastapi import APIRouter, HTTPException, Request
-import app.auth as auth
+from fastapi import APIRouter, Depends
 from app.database import friends, conversations
 from app.websocket import live_updates
+from app.auth import useAuth
 
 router = APIRouter()
 
 @router.get('/v1/get_friends')
-async def get_friends(request: Request):
+async def get_friends(account = Depends(useAuth)):
     """
     # Get Friends (v1)
     Get a list of friends for the user. This includes their online status and last message sent.
@@ -19,17 +19,7 @@ async def get_friends(request: Request):
     - `200 OK`: A list of friends with their online status and last message sent.
     - `401 Unauthorized`: If the token is invalid or missing.
     """
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Verify user token
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    username = account[0]
 
     friends_list = await friends.get_friends_list(username)
 

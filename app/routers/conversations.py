@@ -1,23 +1,13 @@
-from fastapi import APIRouter, Request, HTTPException
-import app.auth as auth
+from fastapi import APIRouter, HTTPException, Depends
 from app.database import conversations
 from app.websocket import live_updates
+from app.auth import useAuth
 
 router = APIRouter()
 
 @router.delete("/v1/remove/{conversation_id}")
-async def remove_conversation_v2(request: Request, conversation_id: str):
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Verifies token with auth server
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+async def remove_conversation_v2(conversation_id: str, account = Depends(useAuth)):
+    username = account[0]
 
     # Get conversation members to notify later
     members = await conversations.get_members(conversation_id)
