@@ -1,15 +1,16 @@
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
 import app.auth as auth
 from app.database import friends, exceptions
 from app.websocket import live_updates
 from app.push_notifications import send_push_notification
+from app.auth import useAuth
 
 router = APIRouter()
 
 @router.get("/v1/get_requests")
-async def get_friend_requests(request: Request):
+async def get_friend_requests(account = Depends(useAuth)):
     """
-    # Get Friend Requests
+    # Get Friend Requests (v1)
     Get a list of friend requests for the user.
 
     ## Request Headers
@@ -20,17 +21,7 @@ async def get_friend_requests(request: Request):
     - `200 OK`: A list of friend requests.
     - `401 Unauthorized`: If the token is invalid or missing.
     """
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Verify user token
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    username = account[0]
 
     # Get user friends list
     requests_list = await friends.get_friend_requests(account=username)
@@ -38,9 +29,13 @@ async def get_friend_requests(request: Request):
     return requests_list
 
 @router.post("/v1/accept_request")
-async def accept_friend_request(request: Request, background_tasks: BackgroundTasks):
+async def accept_friend_request(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    account = Depends(useAuth)
+):
     """
-    ## Accept Friend Request
+    ## Accept Friend Request (v1)
     Accept a friend request and create a conversation.
 
     ### Headers:
@@ -53,17 +48,7 @@ async def accept_friend_request(request: Request, background_tasks: BackgroundTa
     ### Returns:
     - **JSON:** Data associated with the new conversation.
     """
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Verifies token with auth server
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    username = account[0]
     
     # Get request body
     request_body = await request.json()
@@ -77,7 +62,10 @@ async def accept_friend_request(request: Request, background_tasks: BackgroundTa
 
     # Accept friend request and get new conversation id as well as sender
     try:
-        conversation_id, request_sender = await friends.accept_friend(request_id=request_id, account=username)
+        conversation_id, request_sender = await friends.accept_friend(
+            request_id=request_id,
+            account=username
+        )
     except exceptions.NotFound:
         raise HTTPException(status_code=404, detail="Request not found.")
     except exceptions.NoPermission:
@@ -99,24 +87,38 @@ async def accept_friend_request(request: Request, background_tasks: BackgroundTa
     user_online = await live_updates.get_presence(request_sender)
 
     if not user_online:
-        background_tasks.add_task(send_push_notification, username, f"{username} accepted your friend request", {}, request_sender)
+        background_tasks.add_task(
+            send_push_notification,
+            username,
+            f"{username} accepted your friend request",
+            {},
+            request_sender
+        )
 
-    return {"name": request_sender, "conversation_id": conversation_id, "sender_presence": user_online}
+    return {
+        "name": request_sender,
+        "conversation_id": conversation_id,
+        "sender_presence": user_online
+    }
 
 @router.post("/v1/deny_request")
-async def deny_friend_request(request: Request):
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
+async def deny_friend_request(request: Request, account = Depends(useAuth)):
+    """
+    ## Deny Friend Request (v1)
+    Deny a friend request from a user.
 
-    # Verifies token with auth server
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
-    
+    ### Headers:
+    - **username (str):** Username for the account.
+    - **token (str):** Token for the account.
+
+    ### Body:
+    - **request_id (str):** The id of the request.
+
+    ### Returns:
+    - **string:** Status of the request.
+    """
+    username = account[0]
+
     # Get request body
     request_body = await request.json()
     
@@ -138,9 +140,9 @@ async def deny_friend_request(request: Request):
     return "Request Denied!"
 
 @router.get('/v1/outgoing_requests')
-async def outgoing_friend_requests(request: Request):
+async def outgoing_friend_requests(account = Depends(useAuth)):
     """
-    ## Outgoing Friend Requests
+    ## Outgoing Friend Requests (v1)
     Get a list of outgoing friend requests for the user.
 
     ### Headers:
@@ -150,17 +152,7 @@ async def outgoing_friend_requests(request: Request):
     ### Returns:
     - **JSON:** A list of outgoing friend requests.
     """
-    # Get username and toke from headers
-    username = request.headers.get("username")
-    token = request.headers.get("token")
-
-    # Verifies token with auth server
-    try:
-        await auth.verify_token(username, token)
-    except auth.InvalidToken:
-        raise HTTPException(status_code=401, detail="Invalid token!")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    username = account[0]
 
     requests_list = await friends.get_outgoing_friend_requests(account=username)
 
