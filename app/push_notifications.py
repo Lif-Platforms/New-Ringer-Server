@@ -1,7 +1,13 @@
 from app.database import push_notification_tokens
 import requests
 
-async def send_push_notification(title: str, body: str, data: dict, account: str) -> None:
+async def send_push_notification(
+    title: str,
+    body: str,
+    data: dict,
+    account: str,
+    badge: int = None,
+) -> None:
     """
     Send push notification to all devices of a user.
     Args:
@@ -9,6 +15,7 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
         body (str): Body of the notification.
         data (dict): Additional data to send with the notification.
         account (str): Account identifier for the user.
+        badge (int): The badge count for the app.
     Returns:
         None
     """
@@ -21,13 +28,19 @@ async def send_push_notification(title: str, body: str, data: dict, account: str
         messages = []
 
         for token in push_tokens:
-            messages.append({
+            message = {
                 'to': token,
                 'title': title,
                 'body': body,
                 'data': data,
                 'sound': 'default'
-            })
+            }
+
+            # If badge count was supplied, add it to message
+            if badge:
+                message['badge'] = badge
+
+            messages.append(message)
         
         # Send notifications to devices
         requests.post("https://exp.host/--/api/v2/push/send", json=messages, timeout=10)

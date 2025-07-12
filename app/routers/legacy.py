@@ -558,10 +558,18 @@ async def live_updates_route(
                             
                             # If user is not online then send a push notification to their devices
                             if not member_online:
+                                # Attempt to get the number of unread messages the user has
+                                try:
+                                    badgeCount = friends.get_unread_message_count(member)
+                                except:
+                                    badgeCount = None
+
                                 asyncio.ensure_future(send_push_notification(
-                                    username, data['Message'],
-                                    {"conversation_id": data['ConversationId']},
-                                    member
+                                    title=username, 
+                                    body=data['Message'],
+                                    data={"conversation_id": data['ConversationId']},
+                                    account=member,
+                                    badge=badgeCount
                                 ))
 
                                 # If user is connected to notifications websocket service

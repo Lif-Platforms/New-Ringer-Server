@@ -285,3 +285,55 @@ async def get_outgoing_friend_requests(account: str) -> list:
     conn.close()
 
     return friend_requests
+
+def get_unread_message_count(user: str) -> int:
+    """
+    Get the number of unread messages a user has for all their conversations.
+    Args:
+        member (str): The member accessing the unread messages.
+    Raises:
+        database.exceptions.NotFound: User was not found.
+    Returns:
+        messageCount (int): The number of unread messages.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Get the users friends list
+    cursor.execute(
+        "SELECT friends FROM users WHERE account = %s",
+        (user,)
+    )
+    friendsListRAW = cursor.fetchone()['friends']
+
+    if friendsListRAW:
+        friendsList = json.loads(friendsListRAW)
+    else:
+        raise exceptions.NotFound()
+    
+    # Return 0 if the user has no friends :(
+    if len(friendsList) == 0:
+        return 0
+    
+    # Create a list of conversation ids from the friends list
+    # and SQL placeholders for each
+    conversations = []
+
+    for friend in friendsList:
+        conversations.append(friend['Id'])
+
+    placeholders = ', '.join(['%s'] * len(conversations))
+
+    # Get number of unread messages from the database
+    params = conversations + [user] 
+    cursor.execute(
+        f"""SELECT COUNT(*) FROM messages
+        WHERE conversation_id IN ({placeholders}) AND
+        (viewed = 0 OR viewed IS NULL) AND
+        author != %s""",
+        params
+    )
+    messageCount = cursor.fetchone()
+
+    conn.close()
+    return messageCount['COUNT(*)']

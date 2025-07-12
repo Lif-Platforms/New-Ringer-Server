@@ -6,7 +6,6 @@ router = APIRouter()
 
 @router.get("/v1/load/{conversation_id}")
 async def load_messages(
-    request: Request,
     conversation_id: str,
     offset: int = 0,
     account = Depends(useAuth),
