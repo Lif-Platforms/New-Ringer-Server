@@ -5,14 +5,13 @@ from app.auth import useAuth
 router = APIRouter()
 
 @router.get("/v1/load/{conversation_id}")
-async def load_messages_v2(
+async def load_messages(
     request: Request,
     conversation_id: str,
     offset: int = 0,
     account = Depends(useAuth),
 ):
     username = account[0]
-    route_version = request.headers.get("version")
 
     try:
         # Get all members of conversation
@@ -50,12 +49,8 @@ async def load_messages_v2(
             # Mark messages as viewed
             await messages.mark_message_viewed_bulk(conversation_name, conversation_id, offset)
 
-            # Check what route version the client requested
-            if route_version == "2.0":
-                return data
-            else:
-                return messages_
-        except Exception as e:
+            return data
+        except Exception:
             raise HTTPException(status_code=500, detail="Internal Server Error")
     else:
         raise HTTPException(status_code=403, detail="You are not a member of this conversation")
