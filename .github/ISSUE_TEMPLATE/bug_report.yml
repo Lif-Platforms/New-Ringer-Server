@@ -1,6 +1,7 @@
 name: Bug Report
 description: Report an issue with this project.
-type: Bug
+version: 1.0
+type: bug
 body:
   - type: textarea
     label: Description
