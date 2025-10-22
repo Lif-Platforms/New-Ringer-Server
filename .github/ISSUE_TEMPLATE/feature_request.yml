@@ -1,0 +1,13 @@
+name: Feature Request
+description: Add a new feature to this project.
+type: Feature
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe your request.
+      placeholder: Describe your request...
+    validations:
+      required: true
+    
