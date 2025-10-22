@@ -1,18 +1,18 @@
 name: Bug Report
 description: Report an issue with this project.
-version: 1.0
-type: bug
+labels: [bug]
 body:
   - type: textarea
-    label: Description
     attributes:
+      label: Description
       description: Describe the issue you are facing.
       placeholder: Describe your issue...
     validations:
       required: true
+
   - type: textarea
-    label: Reproduction Steps
     attributes:
+      label: Reproduction Steps
       description: Describe the steps we should take to reproduce this issue.
       placeholder: Reproduction steps...
       value: |
@@ -21,16 +21,18 @@ body:
         3.
     validations:
       required: true
+
   - type: textarea
-    label: Expected Behavior
     attributes:
+      label: Expected Behavior
       description: Describe how the software should behave.
       placeholder: Describe the expected behavior...
     validations:
       required: true
+
   - type: textarea
-    label: Platform & Version Info
     attributes:
+      label: Platform & Version Info
       description: Tell us information about the platform and version you are using.
       placeholder: Platform information...
       value: |
@@ -39,9 +41,10 @@ body:
         Ringer Version: eg, 5.2.1
     validations:
       required: true
+
   - type: textarea
-    label: Additional Information
     attributes:
+      label: Additional Information
       description: Any other information you would like to tell us?
       placeholder: Extra information...
     validations:
