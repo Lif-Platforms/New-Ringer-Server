@@ -35,7 +35,7 @@ async def add_friend(
     background_tasks: BackgroundTasks,
     request: schemas.AddFriendRequest,
     account = Depends(useAuth)
-) -> responses.BasicStatusResponse:    
+) -> responses.BasicStatusResponse:
     # Get user friends to prevent sending a friend request to friends
     user_friends = await friends.get_friends_list(account[0])
 
