@@ -1,14 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Depends
-import app.auth as auth
 from app.database import friends, exceptions
 from app.websocket import live_updates
 from app.push_notifications import send_push_notification
 from app.auth import useAuth
+import app.responses as responses
+import app.schemas as schemas
+from typing import List
 
 router = APIRouter()
 
 @router.get("/v1/get_requests")
-async def get_friend_requests(account = Depends(useAuth)):
+async def get_friend_requests(account = Depends(useAuth)) -> List[responses.FriendRequestResponse]:
     """
     # Get Friend Requests (v1)
     Get a list of friend requests for the user.
@@ -27,6 +29,49 @@ async def get_friend_requests(account = Depends(useAuth)):
     requests_list = await friends.get_friend_requests(account=username)
 
     return requests_list
+
+@router.post("/v1/add_friend")
+async def add_friend(
+    background_tasks: BackgroundTasks,
+    request: schemas.AddFriendRequest,
+    account = Depends(useAuth)
+) -> responses.BasicStatusResponse:
+    # Get user friends to prevent sending a friend request to friends
+    user_friends = await friends.get_friends_list(account[0])
+
+    # Check if user is already friends with recipient
+    for user in user_friends:
+        if user['Username'] == request.recipient:
+            raise HTTPException(status_code=409, detail="Already friends with this user.")
+
+    # Add request to database
+    try:
+        await friends.add_new_friend(
+            sender=account[0],
+            recipient=request.recipient,
+            message=request.message
+        )
+    except exceptions.AccountNotFound:
+        raise HTTPException(status_code=404, detail="User not found.")
+    except exceptions.RequestAlreadyOutgoing:
+        raise HTTPException(status_code=409, detail="You already have an outgoing friend request to this user.")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error.")
+
+    # Check if user is online
+    user_online = await live_updates.get_presence(request.recipient)
+
+    # Checks if recipient is online. If not, a push notification will be sent to their devices
+    if not user_online:
+        background_tasks.add_task(
+            send_push_notification,
+            account[0],
+            f"{account[0]} sent you a friend request!",
+            {},
+            request.recipient
+        )
+
+    return responses.BasicStatusResponse(status="Ok")
 
 @router.post("/v1/accept_request")
 async def accept_friend_request(
