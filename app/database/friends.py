@@ -3,6 +3,9 @@ import json
 import uuid
 import datetime
 import app.database.exceptions as exceptions
+from typing import Optional, List, cast
+import app.responses as responses
+from mysql.connector.cursor import MySQLCursorDict
 
 async def get_friends_list(account: str) -> list:
     """
@@ -48,7 +51,7 @@ async def get_friends_list(account: str) -> list:
 
     return friends_list
 
-async def get_friend_requests(account: str):
+async def get_friend_requests(account: str) -> List[responses.FriendRequestResponse]:
     """
     Get all friend requests for a user.
     Args:
@@ -60,7 +63,7 @@ async def get_friend_requests(account: str):
     """
     # Create/ensure database connection
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = cast(MySQLCursorDict, conn.cursor(dictionary=True))
 
     # Gets all data from the database
     cursor.execute("SELECT * FROM users WHERE account = %s", (account,))
@@ -81,23 +84,26 @@ async def get_friend_requests(account: str):
         cursor.execute("SELECT * FROM friend_requests WHERE recipient = %s", (account,))
         data = cursor.fetchall()
 
-        friend_requests = []
+        friend_requests: List[responses.FriendRequestResponse] = []
 
         # Format friend requests
         for request in data:
-            friend_requests.append({
-                "Sender": request[1],
-                "Recipient": request[2],
-                "Request_Id": request[4],
-                "Create_Time": request[3]
-            })
+            if not request: continue
+
+            friend_requests.append(responses.FriendRequestResponse(
+                Sender=cast(str, request['sender']),
+                Recipient=cast(str, request['recipient']),
+                Request_Id=cast(str, request['request_id']),
+                Create_Time=cast(datetime.datetime, request['create_time']),
+                Message=cast(Optional[str], request['message'])
+            ))
 
         # Close db connection once complete
         conn.close()
 
         return friend_requests
 
-async def add_new_friend(sender: str, recipient: str) -> str:
+async def add_new_friend(sender: str, recipient: str, message: Optional[str] = None) -> str:
     """
     Adds a new friend request from the sender to the recipient.
     Args:
@@ -122,10 +128,10 @@ async def add_new_friend(sender: str, recipient: str) -> str:
         raise exceptions.AccountNotFound()
 
     # Check if a request is already outgoing to this user
-    cursor.execute("SELECT * FROM friend_requests WHERE sender = %s AND recipient = %s", (sender, recipient,))
+    cursor.execute("SELECT * FROM friend_requests WHERE sender = %s AND recipient = %s",
+                   (sender, recipient,))
     request = cursor.fetchone()
 
-    # If request exists then throw an error
     if request:
         raise exceptions.RequestAlreadyOutgoing()
     
@@ -134,8 +140,8 @@ async def add_new_friend(sender: str, recipient: str) -> str:
     request_date = datetime.datetime.now(datetime.timezone.utc)
 
     # Add request to database
-    cursor.execute("""INSERT INTO friend_requests (sender, recipient, create_time, request_id)
-                VALUES (%s, %s, %s, %s)""", (sender, recipient, request_date, request_id,))
+    cursor.execute("""INSERT INTO friend_requests (sender, recipient, create_time, request_id, message)
+                VALUES (%s, %s, %s, %s, %s)""", (sender, recipient, request_date, request_id, message))
     conn.commit()
 
     # Close db connection once complete
