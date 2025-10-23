@@ -33,7 +33,7 @@ async def get_friends_list(account: str) -> list:
         cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", (account, "[]", "[]"))
         conn.commit()
 
-        return "[]"
+        return []
 
     # Get friends list from the data
     friends_list = json.loads(item[3])
