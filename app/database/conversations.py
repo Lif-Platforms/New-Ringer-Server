@@ -1,8 +1,9 @@
 from app.database.connections import get_connection
 import app.database.exceptions as exceptions
 import json
+from typing import List, cast
 
-async def get_members(conversation_id: str) -> list:
+async def get_members(conversation_id: str) -> List[str]:
     # Create/ensure database connection
     conn = get_connection()
     cursor = conn.cursor()
@@ -17,7 +18,7 @@ async def get_members(conversation_id: str) -> list:
         raise exceptions.ConversationNotFound()
 
     # Get and return conversation members
-    members = json.loads(conversation[2])
+    members = json.loads(cast(tuple,conversation)[2])
     return members
 
 async def remove_conversation(conversation_id: str, username: str) -> None:

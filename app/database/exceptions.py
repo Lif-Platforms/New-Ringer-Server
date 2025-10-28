@@ -13,3 +13,9 @@ class NotFound(Exception):
 
 class NoPermission(Exception):
     pass
+
+class MessageNotFound(Exception):
+    pass
+
+class DatabaseError(Exception):
+    pass

@@ -1,12 +1,13 @@
 from app.database import push_notification_tokens
 import requests
+from typing import Optional
 
 async def send_push_notification(
     title: str,
     body: str,
     data: dict,
     account: str,
-    badge: int = None,
+    badge: Optional[int] = None,
 ) -> None:
     """
     Send push notification to all devices of a user.

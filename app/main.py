@@ -16,6 +16,7 @@ from app.routers import (
     gifs,
     conversations,
     messages,
+    websocket,
 )
 
 # Get run environment
@@ -98,6 +99,7 @@ app.include_router(router=notifications.router, prefix="/notifications", tags=["
 app.include_router(router=gifs.router, prefix="/gifs", tags=["GIFs"])
 app.include_router(router=conversations.router, prefix="/conversations", tags=["Conversations"])
 app.include_router(router=messages.router, prefix="/messages", tags=["Messages"])
+app.include_router(router=websocket.router, prefix="/ws", tags=["WebSocket"])
 
 # Init config
 cf.init_config()

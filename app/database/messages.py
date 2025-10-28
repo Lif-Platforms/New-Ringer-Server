@@ -1,15 +1,17 @@
+from pydantic import BaseModel
 from app.database.connections import get_connection
 import uuid
 import app.database.exceptions as exceptions
+from typing import Optional, cast
 
 async def send_message(
-    author,
-    conversation_id,
-    message,
+    author: str,
+    conversation_id: str,
+    message: str,
     self_destruct,
-    message_type = None,
-    gif_url = None
-):
+    message_type: Optional[str] = None,
+    gif_url: Optional[str] = None
+) -> str:
     # Create/ensure database connection
     conn = get_connection()
     cursor = conn.cursor()
@@ -213,7 +215,14 @@ async def destruct_messages() -> None:
     conn.commit()
     conn.close()
 
-async def get_message(message_id: str) -> dict:
+class Message(BaseModel):
+    author: str
+    content: str
+    id: str
+    viewed: bool
+    conversationId: str
+
+async def get_message(message_id: str) -> Message:
     """
     ## Get Message
     Get a message from the database based on its id.
@@ -226,25 +235,23 @@ async def get_message(message_id: str) -> dict:
     """
     # Create/ensure database connection
     conn = get_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SElECT * FROM messages WHERE message_id = %s", (message_id,))
+    cursor.execute("SELECT * FROM messages WHERE message_id = %s", (message_id,))
     message = cursor.fetchone()
     conn.close()
 
-    if message:
-        return {
-            'author': message[1],
-            'content': message[2],
-            'message_id': message[3],
-            'conversation_id': message[4],
-            'self_destruct': message[5],
-            'viewed': message[6],
-            'delete_time': message[7]
-        }
-    else:
-        return None
-    
+    if message is None or not isinstance(message, dict):
+        raise exceptions.MessageNotFound()
+
+    return Message(
+        author=str(message.get('author', '')),
+        content=str(message.get('content', '')),
+        id=str(message.get('id', '')),
+        conversationId=str(message.get('conversation_id', '')),
+        viewed=bool(message.get('viewed', False))
+    )
+
 async def view_message(message_id: str) -> None:
     """
     ## View Message

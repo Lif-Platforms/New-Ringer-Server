@@ -1,7 +1,7 @@
 import requests
 from urllib3 import encode_multipart_formdata
 import app.config as config
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, WebSocket, WebSocketException
 
 async def verify_token(username: str, token: str):
     """
@@ -99,3 +99,41 @@ def useAuth(request: Request) -> tuple[str, str]:
             status_code=500,
             detail="Internal server error."
         )
+
+
+async def useAuth_websocket(websocket: WebSocket) -> str:
+    """
+    WebSocket-compatible dependency that verifies auth headers from the WebSocket connection
+    and returns the username on success. Raises `WebSocketException` on error so FastAPI
+    closes the connection with an appropriate WebSocket code.
+    """
+    username = websocket.headers.get("username")
+    token = websocket.headers.get("token")
+
+    if not username or not token:
+        raise WebSocketException(code=1008)
+
+    # Create form data for request
+    request_body, content_type = encode_multipart_formdata([
+        ('username', username),
+        ('token', token),
+    ])
+
+    # Get auth server url from config
+    auth_server_url = config.get_config('auth-server-url')
+
+    # Make auth request to server
+    response = requests.post(
+        url=f"{auth_server_url}/auth/verify_token",
+        headers={'Content-Type': content_type},
+        data=request_body,
+        timeout=10
+    )
+
+    status = response.status_code
+    if status == 200:
+        return username
+    elif status in (401, 403):
+        raise WebSocketException(code=1008)
+    else:
+        raise WebSocketException(code=1011)
