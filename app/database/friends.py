@@ -3,6 +3,8 @@ import json
 import uuid
 import datetime
 import app.database.exceptions as exceptions
+from pydantic import BaseModel
+from typing import Optional
 
 async def get_friends_list(account: str) -> list:
     """
@@ -46,6 +48,76 @@ async def get_friends_list(account: str) -> list:
     # Close db connection once complete
     conn.close()
 
+    return friends_list
+
+class Friend(BaseModel):
+    username: str
+    conversationId: str
+    lastMessage: Optional[str] = None
+    unreadMessages: int
+
+async def get_friends(account: str) -> list[Friend]:
+    """
+    Gets all friends of a user.
+    Args:
+        account (str): The account identifier of the user.
+    Raises:
+        None
+    Returns:
+        friends_list (list): A list of friends.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    friends_list: list[Friend] = []
+
+    # Get friends from database
+    cursor.execute("SELECT friends_list FROM users WHERE account = %s", (account,))
+    friendsRAW = cursor.fetchone()
+
+    if not friendsRAW:
+        # Add user to database if they do not exist
+        cursor.execute("INSERT INTO users (account, friend_requests, friends) VALUES (%s, %s, %s)", 
+                       (account, "[]", "[]"))
+        conn.commit()
+        return friends_list
+    
+    if not isinstance(friendsRAW, tuple) or not isinstance(friendsRAW[0], str):
+        raise exceptions.DatabaseError()
+
+    friendsData = json.loads(friendsRAW[0])
+
+    for friend in friendsData:
+        # Get number of unread messages
+        cursor.execute("""SELECT COUNT(*) FROM messages WHERE conversation_id = %s
+                       AND (viewed = 0 OR viewed IS NULL)
+                       AND author != %s""",
+                       (friend["Id"], account))
+        unread_messages = cursor.fetchone()
+
+        if not isinstance(unread_messages, tuple) or not isinstance(unread_messages[0], int):
+            raise exceptions.DatabaseError()
+
+        # Get last message
+        cursor.execute("""SELECT content FROM messages 
+                       WHERE conversation_id = %s 
+                       ORDER BY create_time DESC LIMIT 1""",
+                       (friend["Id"],))
+        last_message = cursor.fetchone()
+
+        if last_message and isinstance(last_message, tuple) and isinstance(last_message[0], str):
+            last_message_content = last_message[0]
+        else:
+            last_message_content = None
+
+        friends_list.append(Friend(
+            username=friend["Username"],
+            conversationId=friend["Id"],
+            lastMessage=last_message_content,
+            unreadMessages=unread_messages[0]
+        ))
+    
+    conn.close()
     return friends_list
 
 async def get_friend_requests(account: str):
