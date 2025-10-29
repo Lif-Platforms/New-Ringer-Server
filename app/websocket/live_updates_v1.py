@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from fastapi import WebSocket
 from typing import List
 from app.database import friends
+import app.responses as responses
 
 class ConnectionType(BaseModel):
     websocket: WebSocket
@@ -26,13 +27,13 @@ async def handle_presence_change(user: str, online: bool) -> None:
     for connection in connections:
         for friend in friends_list:
             if connection.account == friend.username:
-                await connection.websocket.send_json({
-                    "eventType": "PRESENCE_CHANGE",
-                    "data": {
+                await connection.websocket.send_json(responses.WsEvent(
+                    eventType="PRESENCE_CHANGE",
+                    data={
                         "user": user,
                         "online": online
                     }
-                })
+                ).model_dump())
 
 async def connect_user(websocket: WebSocket, account: str) -> None:
     """
@@ -70,53 +71,22 @@ async def disconnect_user(websocket: WebSocket) -> None:
                 await handle_presence_change(account, online=False)
             break
 
-async def send_request_response(
-    websocket: WebSocket,
-    requestId: str,
-    statusCode: int,
-    message: str,
-) -> None:
-    """
-    Sends an error message to a specific WebSocket connection.
-    Args:
-        websocket (WebSocket): The WebSocket connection to send the error to.
-        requestId (str): The request identifier.
-        statusCode (int): The HTTP status code representing the error.
-        message (str): The error message.
-    Returns:
-        None
-    """
-    # Determine response type based on status code
-    if 200 <= statusCode < 300:
-        responseType = "response"
-    elif 400 <= statusCode < 500:
-        responseType = "error"
-    else:
-        responseType = "unknown"
-
-    await websocket.send_json({
-        "responseType": responseType,
-        "requestId": requestId,
-        "statusCode": statusCode,
-        "message": message
-    })
-
 async def send_event(users: List[str], eventType: str, data: dict) -> None:
     """
     Sends live event to list of users.
     Args:
         users (List[str]): List of users to send the event to.
         eventType (str): The type of event being sent.
-        data (dict): The data to send with the event.
+        data (Any): The data to send with the event.
     Returns:
         None
     """
     for user in connections:
         if user.account in users:
-            await user.websocket.send_json({
-                "eventType": eventType,
-                "data": data
-            })
+            await user.websocket.send_json(responses.WsEvent(
+                eventType=eventType,
+                data=data
+            ))
 
 class UserPresenceList(BaseModel):
     user: str

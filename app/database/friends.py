@@ -75,7 +75,7 @@ async def get_friends(account: str) -> list[Friend]:
     friends_list: list[Friend] = []
 
     # Get friends from database
-    cursor.execute("SELECT friends_list FROM users WHERE account = %s", (account,))
+    cursor.execute("SELECT friends FROM users WHERE account = %s", (account,))
     friendsRAW = cursor.fetchone()
 
     if not friendsRAW:
@@ -104,7 +104,7 @@ async def get_friends(account: str) -> list[Friend]:
         # Get last message
         cursor.execute("""SELECT content FROM messages 
                        WHERE conversation_id = %s 
-                       ORDER BY create_time DESC LIMIT 1""",
+                       ORDER BY send_time DESC LIMIT 1""",
                        (friend["Id"],))
         last_message = cursor.fetchone()
 
