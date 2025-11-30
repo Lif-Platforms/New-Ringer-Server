@@ -15,3 +15,10 @@ __pycache__/
 
 # Cert Files
 *.pem
+
+# User uploads
+userUploads/
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+.codacy/
