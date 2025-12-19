@@ -1,4 +1,3 @@
-import app.database as database
 import sentry_sdk
 import app.config as cf
 from app.__version__ import version
@@ -6,8 +5,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import asyncio
-from app.websocket import live_updates
 from app.routers import (
     legacy,
     friends,
@@ -16,6 +13,7 @@ from app.routers import (
     gifs,
     conversations,
     messages,
+    user,
 )
 
 # Get run environment
@@ -41,35 +39,18 @@ sentry_sdk.init(
     },
 )
 
-async def destruct_messages():
-    while True:
-        # Get delete messages
-        messages = await database.get_delete_messages()
-        
-        # Notify clients to delete the message
-        for message in messages:
-            members = await database.get_members(message['conversation_id'])
-
-            await live_updates.send_message(
-                users=members,
-                message={
-                    "Type": "DELETE_MESSAGE",
-                    "Conversation_Id": message['conversation_id'],
-                    "Message_Id": message['message_id']
-                }
-            )
-
-        await database.destruct_messages()
-
-        await asyncio.sleep(10)
-
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    # Code to run at startup
-    task = asyncio.create_task(destruct_messages())
+    requiredDirs = [
+        "userUploads",
+        "userUploads/userBackgrounds"
+    ]
+
+    for dir in requiredDirs:
+        if not os.path.isdir(dir):
+            os.mkdir(dir)
+
     yield
-    # Code to run at shutdown
-    task.cancel()
 
 
 # Create the FastAPI instance
@@ -98,6 +79,7 @@ app.include_router(router=notifications.router, prefix="/notifications", tags=["
 app.include_router(router=gifs.router, prefix="/gifs", tags=["GIFs"])
 app.include_router(router=conversations.router, prefix="/conversations", tags=["Conversations"])
 app.include_router(router=messages.router, prefix="/messages", tags=["Messages"])
+app.include_router(router=user.router, prefix="/user", tags=["User"])
 
 # Init config
 cf.init_config()
