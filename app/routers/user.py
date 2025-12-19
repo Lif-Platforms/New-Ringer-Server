@@ -21,7 +21,14 @@ async def upload_client_bg(file: UploadFile, account = Depends(useAuth)) -> dict
         userId = authResponse.text[1:-1]
 
     fileContents = await file.read()
-    filePath = f"userUploads/userBackgrounds/{userId}.{file.content_type[6:]}"
+    # Securely construct file path
+    background_dir = "userUploads/userBackgrounds"
+    filename = f"{userId}.{file.content_type[6:]}"
+    filePath = os.path.normpath(os.path.join(background_dir, filename))
+    abs_background_dir = os.path.abspath(background_dir)
+    abs_filePath = os.path.abspath(filePath)
+    if not abs_filePath.startswith(abs_background_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid file path.")
 
     if os.path.isfile(filePath):
         os.remove(filePath)
@@ -56,8 +63,16 @@ def get_client_bg(account = Depends(useAuth)) -> FileResponse:
     else:
         responseFileName, responseFileType = os.path.splitext(clientBgFileDir)
     
+    # Securely construct response file path
+    background_dir = "userUploads/userBackgrounds"
+    filename = responseFileName + responseFileType
+    filePath = os.path.normpath(os.path.join(background_dir, filename))
+    abs_background_dir = os.path.abspath(background_dir)
+    abs_filePath = os.path.abspath(filePath)
+    if not abs_filePath.startswith(abs_background_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid file path.")
     return FileResponse(
-        path=f"userUploads/userBackgrounds/{responseFileName + responseFileType}",
+        path=filePath,
         media_type=f"image/{responseFileType[1:]}"
     )
 
@@ -82,6 +97,14 @@ def delete_client_bg(account = Depends(useAuth)):
     userBgDir = get_bg_dir(userId)
 
     if userBgDir:
-        os.remove("userUploads/userBackgrounds/" + userBgDir)
+        # Securely construct file path for deletion
+        background_dir = "userUploads/userBackgrounds"
+        filename = userBgDir
+        filePath = os.path.normpath(os.path.join(background_dir, filename))
+        abs_background_dir = os.path.abspath(background_dir)
+        abs_filePath = os.path.abspath(filePath)
+        if not abs_filePath.startswith(abs_background_dir + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid file path.")
+        os.remove(filePath)
 
     return {"status": "ok"}
