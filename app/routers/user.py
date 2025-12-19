@@ -4,6 +4,7 @@ from app.auth import useAuth
 import app.config as config
 import requests
 import os
+from werkzeug.utils import secure_filename
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ async def upload_client_bg(file: UploadFile, account = Depends(useAuth)) -> dict
         raise HTTPException(status_code=500)
     else:
         userId = authResponse.text[1:-1]
+        userId = secure_filename(userId)
 
     fileContents = await file.read()
     # Securely construct file path
@@ -47,6 +49,7 @@ def get_client_bg(account = Depends(useAuth)) -> FileResponse:
         raise HTTPException(status_code=500)
     else:
         userId = authResponse.text[1:-1]
+        userId = secure_filename(userId)
 
     def get_bg_dir(userId: str):
         uploadFiles = os.listdir("userUploads/userBackgrounds")
@@ -85,6 +88,7 @@ def delete_client_bg(account = Depends(useAuth)):
         raise HTTPException(status_code=500)
     else:
         userId = authResponse.text[1:-1]
+        userId = secure_filename(userId)
 
     def get_bg_dir(userId: str):
         uploadFiles = os.listdir("userUploads/userBackgrounds")
